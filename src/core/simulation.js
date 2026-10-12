@@ -38,7 +38,7 @@ export function creerSimulation(projet, opts) {
               recalage = mesurer(R, G, kEvap, histo);
               if (recalage.some(x => x.ajuste)) {
                 recalage.forEach(x => { if (x.ajuste) kEvap[x.id] = x.k; });
-                sim = demarrer(G, { init: R, reglage: opts.reglage, kEvap });
+                sim = demarrer(G, { init: R, reglage: opts.reglage, kEvap, tMin: 10 }); // repart du résultat précédent : converge plus vite
                 passe++; S.phase = libelle();
                 continue;
               }

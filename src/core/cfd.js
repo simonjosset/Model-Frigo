@@ -419,7 +419,7 @@ export function demarrer(G, opts) {
           let e = 0; for (let f = 0; f < S.NU; f++) e += S.U[f] * S.U[f]; for (let f = 0; f < S.NV; f++) e += S.V[f] * S.V[f]; for (let f = 0; f < S.NW; f++) e += S.W[f] * S.W[f];
           evol.push({ t: S.t, e, ecart: prev ? Math.abs(e - prev) / Math.max(1e-9, prev) : 1 }); prev = e;
           const der = evol.slice(-8);
-          if (!sim.converge && S.t > Math.min(25, 0.3 * sim.tFin) && der.length === 8 && der.every(x => x.ecart < 4e-4)) {
+          if (!sim.converge && S.t > (opts.tMin != null ? opts.tMin : Math.min(25, 0.3 * sim.tFin)) && der.length === 8 && der.every(x => x.ecart < 4e-4)) {
             sim.converge = true; debutMoy = S.n; finMoy = Math.min(nPas, S.n + Math.max(40, Math.ceil(6 / S.dt)));
             mU.fill(0); mV.fill(0); mW.fill(0); nMoy = 0;
           }

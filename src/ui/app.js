@@ -190,6 +190,8 @@ export function demarrer() {
       if (cle === "produit.ref") { if (v !== "perso") o.produit = produitDuCatalogue(v); else o.produit = Object.assign({}, o.produit, { ref: "perso" }); }
       else if (cle.startsWith("produit.")) { o.produit[cle.slice(8)] = v; if (cle !== "produit.nom") o.produit.ref = "perso"; if (cle !== "produit.nom" && o.produit.ref === "perso" && !/\(modifié\)$|^Produit/.test(o.produit.nom)) o.produit.nom = o.produit.nom + " (modifié)"; }
       else o[cle] = v;
+      // Double flux : appareil plus profond (batteries des deux côtés)
+      if (cle === "type" && v === "double" && o.dep < 0.9) o.dep = 1.0;
       const n = normaliserObjet(t.liste, o, projet.chambre);
       Object.keys(o).forEach(k => delete o[k]); Object.assign(o, n);
       garderDedans(t.liste, o, projet.chambre);
