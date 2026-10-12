@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Modèle Frigo · Chambre froide et flux d'air en 3D</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Modèle Frigo">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#081028">
+<style data-inline="fonts"></style>
+<style>
+:root{
+  --bg:#081028; --side:#081028; --card:#0B1739; --card2:#0E1C45; --line:#343B4F;
+  --ink:#FFFFFF; --muted:#AEB9E1; --faint:#7E89AC;
+  --accent:#CB3CFF; --accent2:#7F25FB; --cyan:#00C2FF; --green:#14CA74; --green-bg:rgba(5,193,104,.18);
+  --red:#FF5A65; --red-bg:rgba(255,90,101,.18); --yellow:#FDB52A; --yellow-bg:rgba(253,181,42,.16);
+  --field:#081028; --view:#0B1739; --glass:rgba(11,23,57,.86);
+  --font:"Mona Sans","Work Sans",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  color-scheme:dark;
+}
+:root[data-theme="light"]{
+  --bg:#F3F5FB; --side:#FFFFFF; --card:#FFFFFF; --card2:#F1F3FA; --line:#DDE2EF;
+  --ink:#0B1739; --muted:#4F5B80; --faint:#7E89AC; --field:#F7F8FC; --view:#EEF1F8; --glass:rgba(255,255,255,.9);
+  color-scheme:light;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.4;overflow:hidden}
+[hidden]{display:none!important}
+button{font:600 13px var(--font);border-radius:6px;padding:8px 13px;cursor:pointer;border:1px solid transparent;color:var(--ink);background:transparent}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
+.b-main{background:var(--accent);color:#fff}
+.b-main:hover{background:#B52FE6}
+.b-main:disabled{opacity:.5;cursor:default}
+.b-ghost{background:var(--card);border-color:var(--line)}
+.b-ghost:hover{border-color:var(--muted)}
+.b-ico{padding:6px 8px;display:inline-flex;align-items:center;gap:6px;color:var(--muted)}
+.b-ico:hover{color:var(--ink);background:var(--card2)}
+.b-ico:disabled{opacity:.35;cursor:default}
+.b-danger{color:var(--red)}
+
+/* Structure : barre haute, objets à gauche, vue 3D au centre, panneau à droite */
+.app{display:grid;grid-template-columns:272px minmax(0,1fr) 372px;grid-template-rows:56px minmax(0,1fr);height:100vh;height:100dvh;padding-top:env(safe-area-inset-top,0px)}
+.top{grid-column:1/-1;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--side);min-width:0}
+.logo{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;white-space:nowrap;margin-right:6px}
+.proj{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);padding:6px 11px;max-width:300px;min-width:0}
+.proj span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.proj small{color:var(--faint);font-weight:500}
+.top .sp{flex:1}
+.calc{display:flex;align-items:center;gap:8px}
+.mode{display:flex;background:var(--card);border:1px solid var(--line);border-radius:7px;padding:3px}
+.mode button{padding:5px 10px;color:var(--muted);font-weight:600}
+.mode button[aria-pressed="true"]{background:var(--card2);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.mode button:disabled{opacity:.4;cursor:default}
+.badge{font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--yellow-bg);color:var(--yellow);margin-left:4px}
+.side{background:var(--side);overflow-y:auto;min-height:0}
+.gauche{border-right:1px solid var(--line);padding:12px 10px 16px}
+.droite{border-left:1px solid var(--line);display:flex;flex-direction:column}
+
+/* Liste des objets */
+.grp{margin-bottom:12px}
+.grp-h{display:flex;align-items:center;justify-content:space-between;padding:4px 6px 4px 8px}
+.grp-h h3{margin:0;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:600}
+.grp-h button{padding:3px 8px;font-size:12px;color:var(--accent);border:1px solid var(--line);background:var(--card)}
+.grp-h button:hover{border-color:var(--accent)}
+.it{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:7px 8px;border-radius:7px;color:var(--ink);font-weight:500;border:1px solid transparent}
+.it:hover{background:var(--card)}
+.it[aria-current="true"]{background:var(--card2);border-color:var(--accent)}
+.it .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.it small{display:block;color:var(--faint);font-weight:500;font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.it .ic{flex:none;width:22px;height:22px;border-radius:5px;display:grid;place-items:center;color:#fff;font-size:11px}
+.it .eye{flex:none;padding:2px 4px;color:var(--faint)}
+.it .eye:hover{color:var(--ink)}
+.it.off .nm{opacity:.5;text-decoration:line-through}
+.vide{color:var(--faint);font-size:12.5px;padding:2px 8px 6px}
+.resume{margin-top:14px;border-top:1px solid var(--line);padding:12px 8px 0;display:grid;grid-template-columns:1fr auto;gap:5px 10px;font-size:12.5px}
+.resume span{color:var(--muted)}
+.resume b{text-align:right;font-variant-numeric:tabular-nums}
+
+/* Vue 3D et calques */
+.centre{position:relative;min-width:0;min-height:0;background:var(--view)}
+#vue3d{position:absolute;inset:0;overflow:hidden}
+#vue3d canvas{display:block;touch-action:none}
+.vue3d-etiquettes{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.etq{position:absolute;left:0;top:0;font-size:11.5px;font-weight:600;padding:2px 7px;border-radius:4px;background:var(--glass);border:1px solid var(--line);white-space:nowrap;color:var(--ink)}
+.etq.on{border-color:var(--accent);color:var(--accent)}
+.ov{position:absolute;display:flex;gap:6px;align-items:center;z-index:2}
+.bar{background:var(--glass);border:1px solid var(--line);border-radius:8px;padding:4px;display:flex;gap:2px;align-items:center;flex-wrap:wrap;backdrop-filter:blur(6px)}
+.bar button{padding:6px 9px;color:var(--muted);font-weight:600;font-size:12.5px}
+.bar button:hover{color:var(--ink)}
+.bar button[aria-pressed="true"]{color:#fff;background:var(--accent)}
+.bar .sep{width:1px;align-self:stretch;background:var(--line);margin:2px 3px}
+.ov-vues{left:12px;top:12px}
+.ov-calques{right:12px;top:12px;max-width:calc(100% - 300px);justify-content:flex-end}
+.ov-calques button{padding:6px 7px}
+.ov-bas{left:12px;right:12px;bottom:12px;justify-content:space-between;align-items:flex-end;pointer-events:none}
+.ov-bas>*{pointer-events:auto}
+.leg{background:var(--glass);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:11.5px;color:var(--muted);min-width:250px}
+.leg .t{display:flex;justify-content:space-between;color:var(--ink);font-weight:600;margin-bottom:6px;gap:12px}
+.leg .g{height:10px;border-radius:3px;background:linear-gradient(90deg,#FF3B4E 0%,#FDB52A 8.3%,#14CA74 20.8%,#00C2FF 50%,#CB3CFF 100%)}
+.leg .e{position:relative;height:14px;margin-top:3px}
+.leg .e span{position:absolute;transform:translateX(-50%);font-variant-numeric:tabular-nums}
+.coupe{background:var(--glass);border:1px solid var(--line);border-radius:8px;padding:6px 10px;display:flex;align-items:center;gap:10px;font-size:12.5px}
+.coupe input[type=range]{width:200px;accent-color:var(--accent)}
+.coupe b{font-variant-numeric:tabular-nums;min-width:52px}
+.sonde{background:var(--glass);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;min-width:190px}
+.sonde b{font-size:18px}
+.aide{position:absolute;left:12px;bottom:92px;font-size:11.5px;color:var(--faint);z-index:1;pointer-events:none;max-width:calc(100% - 24px);margin:0}
+.prog{position:absolute;left:50%;top:14px;transform:translateX(-50%);z-index:3;background:var(--glass);border:1px solid var(--accent);border-radius:10px;padding:10px 14px;min-width:330px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+.prog .l{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:12.5px;margin-bottom:8px}
+.prog .tr{height:6px;background:var(--card2);border-radius:3px;overflow:hidden}
+.prog .tr i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent2),var(--accent));transition:width .2s}
+.prog button{padding:3px 9px;font-size:12px}
+.msg3d{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:30px;color:var(--muted)}
+
+/* Panneau de droite */
+.tabs{display:flex;gap:2px;padding:8px 10px 0;border-bottom:1px solid var(--line);flex:none}
+.tabs button{border-radius:6px 6px 0 0;padding:8px 12px;color:var(--muted);border-bottom:2px solid transparent}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.pane{flex:1;overflow-y:auto;padding:14px 14px 30px;min-height:0}
+.pane h2{margin:0 0 2px;font-size:16px;font-weight:600;display:flex;align-items:center;gap:8px}
+.pane h2 input{font:600 16px var(--font);color:var(--ink);background:transparent;border:1px solid transparent;border-radius:5px;padding:2px 5px;margin-left:-6px;width:100%}
+.pane h2 input:hover{border-color:var(--line)}
+.pane h2 input:focus{border-color:var(--accent);outline:none;background:var(--field)}
+.pane .sous{color:var(--muted);font-size:12.5px;margin:0 0 12px}
+.sec{border-top:1px solid var(--line);padding:12px 0 4px;margin-top:10px}
+.sec h4{margin:0 0 10px;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:600}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 10px}
+.grid>div{min-width:0}
+.grid .w2{grid-column:1/-1}
+label{display:block;font-size:12px;color:var(--muted);font-weight:500;margin-bottom:4px}
+.f{display:flex;align-items:center;background:var(--field);border:1px solid var(--line);border-radius:6px}
+.f:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(203,60,255,.18)}
+.f input,.f select{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font:500 14px var(--font);padding:7px 9px}
+.f select option{background:var(--card);color:var(--ink)}
+.f input:focus,.f select:focus{outline:none}
+.f .u{padding-right:9px;color:var(--faint);font-size:12px;white-space:nowrap}
+.f input::placeholder{color:var(--faint)}
+.chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);margin:4px 0}
+.chk input{accent-color:var(--accent);width:16px;height:16px}
+.dirs{display:flex;gap:4px}
+.dirs button{flex:1;padding:7px 0;background:var(--field);border:1px solid var(--line);color:var(--muted);font-size:15px}
+.dirs button[aria-pressed="true"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.hint{color:var(--faint);font-size:12px;margin:6px 0 0}
+.info{display:grid;grid-template-columns:1fr auto;gap:5px 10px;font-size:12.5px;background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-top:10px}
+.info span{color:var(--muted)}
+.info b{text-align:right;font-variant-numeric:tabular-nums}
+.info .tot{border-top:1px solid var(--line);padding-top:6px;margin-top:2px}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0 4px}
+.kpi{background:var(--card2);border:1px solid var(--line);border-radius:9px;padding:10px 11px}
+.kpi span{display:block;font-size:11.5px;color:var(--muted)}
+.kpi b{display:block;font-size:20px;font-weight:600;margin-top:3px;font-variant-numeric:tabular-nums}
+.kpi b small{font-size:12px;color:var(--muted);font-weight:500}
+.kpi.hero{background:linear-gradient(135deg,#2A1B6B 0%,var(--card2) 75%);border-color:#4B3A9E}
+:root[data-theme="light"] .kpi.hero{background:linear-gradient(135deg,#EFE3FF 0%,#FFFFFF 75%);border-color:#D7C2FF}
+.methode{font-size:12px;color:var(--muted);background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:6px}
+.methode b{color:var(--ink)}
+.al{display:block;width:100%;text-align:left;border-radius:8px;padding:9px 11px;margin-bottom:6px;font-weight:500;font-size:12.5px;border:1px solid var(--line);background:var(--card2)}
+.al b{display:block;font-size:13px;margin-bottom:2px}
+.al.bad{border-color:rgba(255,90,101,.5);background:var(--red-bg)}
+.al.bad b{color:var(--red)}
+.al.warn{border-color:rgba(253,181,42,.45);background:var(--yellow-bg)}
+.al.warn b{color:var(--yellow)}
+.al.ok b{color:var(--green)}
+.tab-mini{width:100%;border-collapse:collapse;font-size:12.5px}
+.tab-mini th{text-align:left;color:var(--faint);font-weight:500;padding:4px 4px 4px 0}
+.tab-mini td{padding:4px 4px 4px 0;border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+.tab-mini td.n{text-align:right}
+.puces{display:flex;flex-wrap:wrap;gap:3px;margin-top:6px}
+.puces i{width:12px;height:12px;border-radius:3px;display:block}
+.note{color:var(--faint);font-size:11.5px;margin:12px 0 0}
+
+/* Boîtes de dialogue */
+dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:18px 20px;width:min(560px,94vw);max-height:86vh;overflow:auto}
+dialog::backdrop{background:rgba(3,8,22,.6)}
+.dlg-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.dlg-h h2{margin:0;font-size:17px}
+.plist{list-style:none;margin:12px 0;padding:0}
+.plist li{display:flex;align-items:center;gap:8px;padding:8px 6px;border-top:1px solid var(--line)}
+.plist li:first-child{border-top:0}
+.plist li .nm{flex:1;min-width:0}
+.plist li .nm small{display:block;color:var(--faint)}
+.plist li.cur .nm b{color:var(--accent)}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:9px 14px;font-size:13px;z-index:50;box-shadow:0 6px 24px rgba(0,0,0,.3)}
+
+/* Écrans étroits (iPhone) : vue en haut, panneaux dessous */
+@media (max-width:980px){
+  body{overflow:auto}
+  .app{grid-template-columns:1fr;grid-template-rows:auto 58vh auto auto;height:auto}
+  .top{flex-wrap:wrap;padding:8px 10px;gap:8px}
+  .centre{grid-row:2;min-height:58vh}
+  .gauche{grid-row:3;border-right:0;border-top:1px solid var(--line)}
+  .droite{grid-row:4;border-left:0;border-top:1px solid var(--line)}
+  .side{overflow:visible}
+  .ov-calques{left:12px;right:12px;top:auto;bottom:118px;max-width:none;justify-content:flex-start}
+  .aide{display:none}
+  .leg{min-width:0}
+  .coupe input[type=range]{width:120px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="logo"><svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#CB3CFF"/><stop offset="1" stop-color="#7F25FB"/></linearGradient></defs><rect width="26" height="26" rx="6" fill="url(#lg)"/><path d="M5 9.5l8-4 8 4v7l-8 4-8-4z M5 9.5l8 4 8-4 M13 13.5v7" stroke="#fff" stroke-width="1.6" fill="none" stroke-linejoin="round"/></svg>Modèle Frigo</div>
+    <button class="proj" type="button" id="bProjets" title="Projets"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><small>Projet</small><span id="nomProjet"></span></button>
+    <button class="b-ico" type="button" id="bAnnuler" title="Annuler (Ctrl+Z)" aria-label="Annuler"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+    <button class="b-ico" type="button" id="bRetablir" title="Rétablir (Ctrl+Y)" aria-label="Rétablir"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+    <div class="sp"></div>
+    <div class="calc">
+      <div class="mode" role="group" aria-label="Champ affiché">
+        <button type="button" id="mApercu" aria-pressed="true" title="Modèle de jets simplifié, recalculé à chaque modification">Aperçu</button>
+        <button type="button" id="mCfd" aria-pressed="false" disabled title="Résultat du calcul fin">Calcul fin<span class="badge" id="perime" hidden>à relancer</span></button>
+      </div>
+      <button class="b-main" type="button" id="bCalcul">Lancer le calcul fin</button>
+    </div>
+    <button class="b-ico" type="button" id="bPng" title="Enregistrer la vue en image PNG"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="m21 17-5-5-8 7"/></svg>PNG</button>
+    <button class="b-ico" type="button" id="bTheme" title="Thème clair ou sombre" aria-label="Changer de thème"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 0 0 16z" fill="currentColor"/></svg></button>
+  </header>
+
+  <aside class="side gauche" aria-label="Objets de la chambre">
+    <div class="grp"><button class="it" type="button" data-sel="chambre"><span class="ic" style="background:#3D7BFF">▢</span><span class="nm">Chambre<small id="chInfo"></small></span></button></div>
+    <div id="listes"></div>
+    <div class="resume" id="resume"></div>
+  </aside>
+
+  <main class="centre">
+    <div id="vue3d"></div>
+    <p class="msg3d" id="msg3d" hidden>La vue 3D n'est pas disponible : WebGL est désactivé dans ce navigateur.</p>
+    <div class="ov ov-vues bar" role="toolbar" aria-label="Vues">
+      <button type="button" data-vue="iso">3D</button><button type="button" data-vue="dessus">Dessus</button><button type="button" data-vue="face">Face</button><button type="button" data-vue="cote">Côté</button>
+    </div>
+    <div class="ov ov-calques bar" role="toolbar" aria-label="Calques d'affichage">
+      <button type="button" data-aff="particules" aria-pressed="true" title="Particules entraînées par l'air">Particules</button>
+      <button type="button" data-aff="lignes" aria-pressed="false" title="Lignes de courant depuis chaque ventilateur">Lignes</button>
+      <button type="button" data-aff="coupe" aria-pressed="false" title="Plan de coupe coloré par la vitesse ; cliquez dessus pour mesurer">Coupe</button>
+      <button type="button" data-aff="vecteurs" aria-pressed="false" title="Flèches de vitesse sur la coupe">Flèches</button>
+      <button type="button" data-aff="mortes" aria-pressed="false" title="Volume où l'air est presque immobile">Zones mortes</button>
+      <button type="button" data-aff="couleurProduits" aria-pressed="false" title="Colorer les produits selon la vitesse de l'air à travers chaque échelle">Produits</button>
+      <span class="sep"></span>
+      <button type="button" data-aff="murs" aria-pressed="true">Murs</button>
+      <button type="button" data-aff="plafond" aria-pressed="false">Plafond</button>
+      <button type="button" data-aff="etiquettes" aria-pressed="true">Noms</button>
+    </div>
+    <p class="aide" id="aide">Clic : sélectionner · glisser l'objet sélectionné : déplacer (Maj : au centimètre) · glisser ailleurs : tourner · clic droit : décaler · molette : zoom · R : pivoter · Suppr : supprimer</p>
+    <div class="prog" id="prog" hidden role="status"><div class="l"><span id="progT">Calcul fin…</span><button type="button" class="b-ghost" id="bStop">Annuler</button></div><div class="tr"><i id="progB"></i></div></div>
+    <div class="ov ov-bas">
+      <div class="leg"><div class="t"><span>Vitesse de l'air</span><span id="legMode">Aperçu instantané</span></div><div class="g"></div><div class="e"><span style="left:0%">0</span><span style="left:8.3%">0,1</span><span style="left:20.8%">0,25</span><span style="left:50%">0,6</span><span style="left:100%">1,2 m/s</span></div></div>
+      <div class="coupe" id="coupeBar" hidden><span>Coupe</span><div class="mode" role="group" aria-label="Axe de la coupe"><button type="button" data-axe="z" aria-pressed="true">Horiz.</button><button type="button" data-axe="y" aria-pressed="false">Long.</button><button type="button" data-axe="x" aria-pressed="false">Trans.</button></div><input type="range" id="coupePos" min="0" max="1" step="0.01" aria-label="Position de la coupe"><b id="coupeVal"></b></div>
+      <div class="sonde" id="sonde" hidden></div>
+    </div>
+  </main>
+
+  <aside class="side droite" aria-label="Propriétés et résultats">
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" data-tab="prop" aria-selected="true">Propriétés</button>
+      <button type="button" role="tab" data-tab="res" aria-selected="false">Résultats</button>
+      <button type="button" role="tab" data-tab="regl" aria-selected="false">Réglages</button>
+    </div>
+    <div class="pane" id="pane-prop"></div>
+    <div class="pane" id="pane-res" hidden></div>
+    <div class="pane" id="pane-regl" hidden></div>
+  </aside>
+</div>
+
+<dialog id="dlgProjets">
+  <div class="dlg-h"><h2>Projets</h2><button type="button" class="b-ico" id="projFermer" aria-label="Fermer">✕</button></div>
+  <p class="hint">Les projets sont enregistrés sur cet appareil. Exportez-les en fichier pour les archiver ou les transmettre.</p>
+  <ul class="plist" id="projListe"></ul>
+  <div class="actions">
+    <button type="button" class="b-main" id="projNouveau">+ Nouveau projet</button>
+    <button type="button" class="b-ghost" id="projExemple">+ Exemple</button>
+    <button type="button" class="b-ghost" id="projExport">Exporter ce projet</button>
+    <button type="button" class="b-ghost" id="projExportTout">Exporter tous les projets</button>
+    <button type="button" class="b-ghost" id="projImport">Importer un fichier</button>
+    <input type="file" id="projFichier" accept=".json,application/json" hidden>
+  </div>
+</dialog>
+
+<script type="text/plain" data-inline="worker"></script>
+<script data-inline="app"></script>
+<script>
+// Service worker : fonctionnement hors ligne une fois l'application installée
+if("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) window.addEventListener("load", function(){ navigator.serviceWorker.register("sw.js").catch(function(){}); });
+</script>
+</body>
+</html>
