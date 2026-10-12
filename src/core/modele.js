@@ -2,6 +2,7 @@
    Repère : x le long de la largeur, y le long de la profondeur, z vers le haut, origine au coin du sol.
    Orientations (dir) en degrés : 0 = vers +x, 90 = vers +y, 180 = vers -x, 270 = vers -y. */
 import { produitDuCatalogue } from "./produits.js";
+import { COINS } from "./geometrie.js";
 
 export const FORMAT = "modele-frigo";
 export const VERSION = 1;
@@ -26,30 +27,30 @@ export const MAILLES = {
 };
 
 export function chambreDefaut() {
-  return { forme: "rect", a: 9, B: 6.5, c: 3, b: 3, H: 3.6, Ti: -25 };
+  return { forme: "rect", longueur: 9, largeur: 6.5, H: 3.6, coin: "arriere-droit", coinLong: 3, coinLarg: 3, Ti: -25 };
 }
 export function reglagesDefaut() {
   return { vmin: 0.15, vCourant: 0.5, zTravail: 1.8, tauxVise: 40, maille: "normal", recalage: true };
 }
 
 export function evapDefaut(ch) {
-  return { type: "simple", x: ch.a / 2, y: 0.5, dir: 90, len: 2.4, dep: 0.6, eh: 0.6, zb: null, nf: 3, dv: 0.5, q: 12000, T: 18, off: false };
+  return { type: "simple", x: ch.longueur / 2, y: 0.5, dir: 90, len: 2.4, dep: 0.6, eh: 0.6, zb: null, nf: 3, dv: 0.5, q: 12000, T: 18, off: false };
 }
 export function echellesDefaut(ch) {
   return {
-    x: ch.a / 2, y: ch.B / 2, dir: 0, n: 6, rangees: 2, ecart: 0.05, allee: 0.8,
+    x: ch.longueur / 2, y: ch.largeur / 2, dir: 0, n: 6, rangees: 2, ecart: 0.05, allee: 0.8,
     H: 1.875, W: 0.626, D: 0.507, etages: 23, etagesCharges: null, parEtage: null,
     produit: produitDuCatalogue("glace33")
   };
 }
 export function cloisonDefaut(ch) {
-  return { x0: ch.a * 0.65, y0: 0, x1: ch.a * 0.65, y1: ch.B * 0.6, ep: 0.1, zb: 0, zh: null };
+  return { x0: ch.longueur * 0.65, y0: 0, x1: ch.longueur * 0.65, y1: ch.largeur * 0.6, ep: 0.1, zb: 0, zh: null };
 }
 export function obstacleDefaut(ch) {
-  return { x: ch.a * 0.25, y: ch.B * 0.7, dir: 0, L: 1.2, l: 0.8, h: 1.5, zb: 0, poreux: 0 };
+  return { x: ch.longueur * 0.25, y: ch.largeur * 0.7, dir: 0, L: 1.2, l: 0.8, h: 1.5, zb: 0, poreux: 0 };
 }
 export function porteDefaut(ch) {
-  return { x: ch.a * 0.8, y: ch.B, w: 1.2, h: 2.2 };
+  return { x: ch.longueur * 0.8, y: ch.largeur, w: 1.2, h: 2.2 };
 }
 const DEFAUTS = { evaps: evapDefaut, echelles: echellesDefaut, cloisons: cloisonDefaut, obstacles: obstacleDefaut, portes: porteDefaut };
 
@@ -146,10 +147,21 @@ export function normaliserObjet(liste, o, ch) {
 
 export function normaliser(p) {
   p = p && typeof p === "object" ? p : {};
-  const ch = Object.assign(chambreDefaut(), p.chambre || {});
+  const src = Object.assign({}, p.chambre || {});
+  // Ancien format (branches a, B, c, b) : rectangle total moins le coin avant droit
+  if (src.longueur == null && src.a != null) {
+    const a = n(src.a, 9, 0.8, 200), B = n(src.B, 6.5, 0.8, 200), L = src.forme === "L";
+    const c = n(src.c, 3, 0.3, 200), b = Math.min(n(src.b, 3, 0.3, 200), B);
+    Object.assign(src, { longueur: a + (L ? c : 0), largeur: B, coin: "avant-droit", coinLong: c, coinLarg: B - b });
+    if (L && B - b < 0.1) src.forme = "rect";
+  }
+  ["a", "B", "c", "b"].forEach(x => delete src[x]);
+  const ch = Object.assign(chambreDefaut(), src);
   ch.forme = ch.forme === "L" ? "L" : "rect";
-  ch.a = n(ch.a, 9, 0.8, 200); ch.B = n(ch.B, 6.5, 0.8, 200); ch.H = n(ch.H, 3.6, 1.2, 30);
-  ch.c = n(ch.c, 3, 0.3, 200); ch.b = n(ch.b, 3, 0.3, ch.B); ch.Ti = n(ch.Ti, -25, -60, 30);
+  ch.longueur = n(ch.longueur, 9, 0.8, 200); ch.largeur = n(ch.largeur, 6.5, 0.8, 200); ch.H = n(ch.H, 3.6, 1.2, 30);
+  ch.coin = COINS[ch.coin] ? ch.coin : "arriere-droit";
+  ch.coinLong = n(ch.coinLong, 3, 0.1, Math.max(0.1, ch.longueur - 0.3)); ch.coinLarg = n(ch.coinLarg, 3, 0.1, Math.max(0.1, ch.largeur - 0.3));
+  ch.Ti = n(ch.Ti, -25, -60, 30);
   const out = {
     format: FORMAT, version: VERSION,
     nom: String(p.nom || "Projet").slice(0, 80), maj: n(p.maj, Date.now()),

@@ -1,27 +1,49 @@
 /* Géométrie de la chambre et des objets (module pur).
-   Chambre rectangulaire ou en L : branche 1 de largeur a sur toute la profondeur B,
-   branche 2 de largeur c ajoutée à droite sur la profondeur b, côté y = B. */
+   Chambre rectangulaire (longueur suivant x, largeur suivant y) ou en L : le même rectangle
+   dont on retire un coin (coin avant-gauche, avant-droit, arrière-gauche ou arrière-droit).
+   « Avant » = côté y = 0 (vue de face), « gauche » = côté x = 0. */
 import { echelleInfo, resistanceEchelle } from "./produits.js";
 
+export const COINS = {
+  "avant-gauche": { nom: "Avant gauche", cx: 0, cy: 0 },
+  "avant-droit": { nom: "Avant droit", cx: 1, cy: 0 },
+  "arriere-gauche": { nom: "Fond gauche", cx: 0, cy: 1 },
+  "arriere-droit": { nom: "Fond droit", cx: 1, cy: 1 }
+};
+
 export function dims(ch) {
-  const a = Math.max(0.5, ch.a), B = Math.max(0.5, ch.B), L = ch.forme === "L";
-  const c = L ? Math.max(0.3, ch.c) : 0, b = L ? Math.min(Math.max(0.3, ch.b), B) : B;
-  return { a, B, c, b, H: Math.max(1, ch.H), W: a + c, L };
+  const W = Math.max(0.5, ch.longueur), B = Math.max(0.5, ch.largeur), H = Math.max(1, ch.H);
+  let enc = null;
+  if (ch.forme === "L") {
+    const cl = Math.min(Math.max(0.1, ch.coinLong), W - 0.3), cw = Math.min(Math.max(0.1, ch.coinLarg), B - 0.3), c = COINS[ch.coin] || COINS["arriere-droit"];
+    if (cl > 0.05 && cw > 0.05) enc = { x0: c.cx ? W - cl : 0, x1: c.cx ? W : cl, y0: c.cy ? B - cw : 0, y1: c.cy ? B : cw, cl, cw, cx: c.cx, cy: c.cy };
+  }
+  return { W, B, H, L: !!enc, enc };
 }
 
+/* Vrai si le point est dans le coin retiré du L */
+export function dansEncoche(k, x, y) {
+  const e = k.enc;
+  return !!e && x > e.x0 + 1e-9 && x < e.x1 - 1e-9 && y > e.y0 + 1e-9 && y < e.y1 - 1e-9;
+}
+
+/* Contour au sol, sens trigonométrique (intérieur à gauche de chaque mur) */
 export function polygone(ch) {
-  const k = dims(ch);
-  return k.L ? [[0, 0], [k.a, 0], [k.a, k.B - k.b], [k.W, k.B - k.b], [k.W, k.B], [0, k.B]] : [[0, 0], [k.a, 0], [k.a, k.B], [0, k.B]];
+  const k = dims(ch), W = k.W, B = k.B, e = k.enc;
+  if (!e) return [[0, 0], [W, 0], [W, B], [0, B]];
+  if (!e.cx && !e.cy) return [[e.x1, 0], [W, 0], [W, B], [0, B], [0, e.y1], [e.x1, e.y1]];
+  if (e.cx && !e.cy) return [[0, 0], [e.x0, 0], [e.x0, e.y1], [W, e.y1], [W, B], [0, B]];
+  if (e.cx && e.cy) return [[0, 0], [W, 0], [W, e.y0], [e.x0, e.y0], [e.x0, B], [0, B]];
+  return [[0, 0], [W, 0], [W, B], [e.x1, B], [e.x1, e.y0], [0, e.y0]];
 }
 
 export function dedans(ch, x, y) {
   const k = dims(ch);
   if (x < 0 || y < 0 || x > k.W || y > k.B) return false;
-  if (k.L && x > k.a && y < k.B - k.b) return false;
-  return true;
+  return !dansEncoche(k, x, y);
 }
 
-export function surface(ch) { const k = dims(ch); return k.a * k.B + k.c * (k.L ? k.b : 0); }
+export function surface(ch) { const k = dims(ch); return k.W * k.B - (k.enc ? k.enc.cl * k.enc.cw : 0); }
 export function volume(ch) { return surface(ch) * dims(ch).H; }
 
 export function dirVec(deg) {
@@ -136,10 +158,12 @@ export function garderDedans(liste, o, ch) {
   const bx = boiteObjet(liste, o, ch); if (!bx) return;
   const hx = (bx.x1 - bx.x0) / 2, hy = (bx.y1 - bx.y0) / 2, ox = o.x - (bx.x0 + bx.x1) / 2, oy = o.y - (bx.y0 + bx.y1) / 2;
   let cx = clamp(o.x - ox, hx, Math.max(hx, k.W - hx)), cy = clamp(o.y - oy, hy, Math.max(hy, k.B - hy));
-  if (k.L && cx + hx > k.a + 1e-6 && cy - hy < k.B - k.b - 1e-6) {
-    // Dans l'encoche du L : on pousse vers la position valide la plus proche
-    const yIn = k.B - k.b + hy, xIn = k.a - hx;
-    if (Math.abs(yIn - cy) < Math.abs(xIn - cx) && yIn <= k.B - hy + 1e-6) cy = yIn; else cx = Math.max(hx, xIn);
+  const e = k.enc;
+  if (e && cx + hx > e.x0 + 1e-6 && cx - hx < e.x1 - 1e-6 && cy + hy > e.y0 + 1e-6 && cy - hy < e.y1 - 1e-6) {
+    // Dans le coin retiré du L : on pousse vers la position valide la plus proche
+    const xIn = e.cx ? e.x0 - hx : e.x1 + hx, yIn = e.cy ? e.y0 - hy : e.y1 + hy;
+    const okX = xIn >= hx - 1e-6 && xIn <= k.W - hx + 1e-6, okY = yIn >= hy - 1e-6 && yIn <= k.B - hy + 1e-6;
+    if (okY && (!okX || Math.abs(yIn - cy) < Math.abs(xIn - cx))) cy = yIn; else cx = clamp(xIn, hx, Math.max(hx, k.W - hx));
   }
   o.x = cx + ox; o.y = cy + oy;
 }

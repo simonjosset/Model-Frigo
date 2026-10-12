@@ -118,8 +118,15 @@ export function creerVue(conteneur, cb) {
     plafond = new Mesh(new ShapeGeometry(forme), M.plafond); plafond.position.z = H; plafond.visible = aff.plafond; chambre.add(plafond);
     // Quadrillage d'un mètre, limité à la chambre
     const g = [];
-    for (let x = 1; x < k.W - 0.01; x++) { const y0 = k.L && x > k.a ? k.B - k.b : 0; g.push(x, y0, 0, x, k.B, 0); }
-    for (let y = 1; y < k.B - 0.01; y++) { const x1 = k.L && y < k.B - k.b ? k.a : k.W; g.push(0, y, 0, x1, y, 0); }
+    const e = k.enc;
+    for (let x = 1; x < k.W - 0.01; x++) {
+      if (e && x > e.x0 && x < e.x1) { if (e.cy) g.push(x, 0, 0, x, e.y0, 0); else g.push(x, e.y1, 0, x, k.B, 0); }
+      else g.push(x, 0, 0, x, k.B, 0);
+    }
+    for (let y = 1; y < k.B - 0.01; y++) {
+      if (e && y > e.y0 && y < e.y1) { if (e.cx) g.push(0, y, 0, e.x0, y, 0); else g.push(e.x1, y, 0, k.W, y, 0); }
+      else g.push(0, y, 0, k.W, y, 0);
+    }
     const gg = new BufferGeometry(); gg.setAttribute("position", new Float32BufferAttribute(g, 3));
     chambre.add(new LineSegments(gg, M.grille));
     // Murs : un panneau par côté, masqué quand il est entre la caméra et l'intérieur

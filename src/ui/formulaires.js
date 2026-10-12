@@ -1,6 +1,6 @@
 /* Panneaux de propriétés : HTML des formulaires (chambre, objets, réglages) et lecture des saisies. */
 import { CATALOGUE } from "../core/produits.js";
-import { dims, surface, volume, evapGeo, echellesGeo, cloisonGeo } from "../core/geometrie.js";
+import { dims, surface, volume, evapGeo, echellesGeo, cloisonGeo, polygone, COINS } from "../core/geometrie.js";
 import { MAILLES } from "../core/modele.js";
 
 export function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
@@ -46,13 +46,51 @@ export function panneauChambre(p) {
   const ch = p.chambre, k = dims(ch), c = x => ({ cle: "chambre." + x });
   let h = '<h2><input data-k="projet.nom" data-type="txt" value="' + esc(p.nom) + '" aria-label="Nom du projet" maxlength="80"></h2><p class="sous">Projet · géométrie de la chambre froide</p>';
   h += '<div class="sec"><h4>Chambre</h4><div class="grid">' + sel(ch, "forme", "Forme", [["rect", "Rectangulaire"], ["L", "En L"]], { w2: true, cle: "chambre.forme" });
-  h += num(ch, "a", "Largeur" + (k.L ? " (branche 1)" : ""), "m", c("a")) + num(ch, "B", "Profondeur" + (k.L ? " totale" : ""), "m", c("B"));
-  if (k.L) h += num(ch, "c", "Largeur ajoutée (branche 2)", "m", c("c")) + num(ch, "b", "Profondeur de la branche 2", "m", c("b"));
+  h += num(ch, "longueur", "Longueur totale (gauche ↔ droite)", "m", c("longueur")) + num(ch, "largeur", "Largeur totale (avant ↔ fond)", "m", c("largeur"));
   h += num(ch, "H", "Hauteur sous plafond", "m", c("H")) + num(ch, "Ti", "Température", "°C", { dec: 0, cle: "chambre.Ti" }) + "</div>";
-  if (k.L) h += '<p class="hint">En L : branche 1 de largeur a sur toute la profondeur, branche 2 ajoutée à droite (côté +x) sur la profondeur b, au fond (côté +y).</p>';
-  h += info([["Surface au sol", fr(surface(ch), 1) + " m²"], ["Volume", fr(volume(ch), 1) + " m³"]]) + "</div>";
-  h += '<p class="note">La température sert de repère : le calcul des flux est isotherme (pas de chute du jet froid ni de convection naturelle).</p>';
+  h += '<div class="plan">' + planChambre(ch) + "</div>";
+  if (k.L) {
+    h += '<div class="sec"><h4>Coin retiré pour faire le L</h4>';
+    h += '<p class="hint" style="margin:0 0 8px">Une salle en L, c\'est le rectangle total auquel on enlève un coin. Choisissez le coin sur le plan ou ci-dessous, puis sa taille.</p>';
+    h += '<div class="coins" role="group" aria-label="Coin retiré">' + ["arriere-gauche", "arriere-droit", "avant-gauche", "avant-droit"].map(q =>
+      '<button type="button" data-coin="' + q + '" aria-pressed="' + (ch.coin === q) + '">' + COINS[q].nom + "</button>").join("") + "</div>";
+    h += '<div class="grid" style="margin-top:10px">' + num(ch, "coinLong", "Longueur du coin (gauche ↔ droite)", "m", c("coinLong")) + num(ch, "coinLarg", "Largeur du coin (avant ↔ fond)", "m", c("coinLarg")) + "</div></div>";
+  }
+  h += info([["Surface au sol", fr(surface(ch), 1) + " m²"], ["Volume", fr(volume(ch), 1) + " m³"]]);
+  h += '<p class="note">« Avant » est le côté vu de face dans la 3D (bouton Face). La température sert de repère : le calcul des flux est isotherme (pas de chute du jet froid ni de convection naturelle).</p>';
   return h;
+}
+
+/* Plan coté de la chambre (SVG) ; avant en bas, fond en haut. En L, les coins sont cliquables. */
+function planChambre(ch) {
+  const k = dims(ch), W = k.W, B = k.B, e = k.enc;
+  const larg = 300, m = { g: 46, d: 16, h: 26, b: 44 }, sc = Math.min((larg - m.g - m.d) / W, 210 / B);
+  const X = x => m.g + x * sc, Y = y => m.h + (B - y) * sc, haut = m.h + B * sc + m.b;
+  const pts = polygone(ch).map(q => X(q[0]).toFixed(1) + "," + Y(q[1]).toFixed(1)).join(" ");
+  let s = '<svg viewBox="0 0 ' + larg + " " + haut.toFixed(0) + '" role="img" aria-label="Plan coté de la chambre">';
+  s += '<defs><marker id="fl" viewBox="0 0 6 6" refX="3" refY="3" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L6,3 L0,6 z" class="pl-fl"/></marker></defs>';
+  if (e) s += '<rect x="' + X(e.x0).toFixed(1) + '" y="' + Y(e.y1).toFixed(1) + '" width="' + ((e.x1 - e.x0) * sc).toFixed(1) + '" height="' + ((e.y1 - e.y0) * sc).toFixed(1) + '" class="pl-enc"/>';
+  s += '<polygon points="' + pts + '" class="pl-sol"/>';
+  // Cotes totales : longueur sous le plan, largeur à gauche
+  const yc = Y(0) + 16, xc = X(0) - 16;
+  s += '<line x1="' + X(0) + '" y1="' + yc + '" x2="' + X(W) + '" y2="' + yc + '" class="pl-cote" marker-start="url(#fl)" marker-end="url(#fl)"/>';
+  s += '<text x="' + ((X(0) + X(W)) / 2) + '" y="' + (yc + 13) + '" text-anchor="middle">Longueur totale ' + fr(W, 2) + ' m</text>';
+  s += '<line x1="' + xc + '" y1="' + Y(0) + '" x2="' + xc + '" y2="' + Y(B) + '" class="pl-cote" marker-start="url(#fl)" marker-end="url(#fl)"/>';
+  s += '<text x="' + (xc - 6) + '" y="' + ((Y(0) + Y(B)) / 2) + '" text-anchor="middle" transform="rotate(-90 ' + (xc - 6) + " " + ((Y(0) + Y(B)) / 2) + ')">Largeur totale ' + fr(B, 2) + " m</text>";
+  // Coin retiré : ses deux cotes dans le rectangle hachuré
+  if (e) {
+    const cxm = (X(e.x0) + X(e.x1)) / 2, cym = (Y(e.y0) + Y(e.y1)) / 2;
+    s += '<text x="' + cxm + '" y="' + (cym - 2) + '" text-anchor="middle" class="pl-enc-t">' + fr(e.cl, 2) + " × " + fr(e.cw, 2) + " m</text>";
+    s += '<text x="' + cxm + '" y="' + (cym + 11) + '" text-anchor="middle" class="pl-enc-t">retiré</text>';
+  }
+  s += '<text x="' + ((X(0) + X(W)) / 2) + '" y="' + (Y(0) + 38) + '" text-anchor="middle" class="pl-lab">AVANT (vue de face)</text>';
+  s += '<text x="' + ((X(0) + X(W)) / 2) + '" y="' + (m.h - 9) + '" text-anchor="middle" class="pl-lab">FOND</text>';
+  // Coins cliquables (salle en L)
+  if (ch.forme === "L") Object.keys(COINS).forEach(q => {
+    const c = COINS[q], x = c.cx ? X(W) : X(0), y = c.cy ? Y(B) : Y(0), on = ch.coin === q;
+    s += '<g data-coin="' + q + '" class="pl-coin' + (on ? " on" : "") + '" role="button" tabindex="0" aria-label="Retirer le coin ' + c.nom.toLowerCase() + '"><title>Retirer le coin ' + c.nom.toLowerCase() + '</title><circle cx="' + x + '" cy="' + y + '" r="9"/></g>';
+  });
+  return s + "</svg>";
 }
 
 /* ---------- Évaporateur ---------- */

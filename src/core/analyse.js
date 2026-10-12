@@ -160,7 +160,7 @@ function chevauchements(projet, G) {
   }
   const k = G.k;
   G.echelles.forEach(eg => eg.geo.chariots.some(c => {
-    const hors = c.x0 < -0.01 || c.y0 < -0.01 || c.x1 > k.W + 0.01 || c.y1 > k.B + 0.01 || (k.L && c.x1 > k.a + 0.01 && c.y0 < k.B - k.b - 0.01);
+    const e = k.enc, hors = c.x0 < -0.01 || c.y0 < -0.01 || c.x1 > k.W + 0.01 || c.y1 > k.B + 0.01 || (!!e && c.x1 > e.x0 + 0.01 && c.x0 < e.x1 - 0.01 && c.y1 > e.y0 + 0.01 && c.y0 < e.y1 - 0.01);
     if (hors) out.push(eg.e.nom + " : des échelles dépassent de la chambre.");
     return hors;
   }));

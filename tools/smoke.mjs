@@ -61,6 +61,17 @@ await page.click("#bRetablir");
 check("rétablir", await page.evaluate(() => MF.projet().echelles[0].produit.ref === "gn11"));
 await page.click("#bAnnuler");
 
+// Salle en L : coin retiré choisi sur le plan
+await page.click('[data-sel="chambre"]');
+await page.selectOption("#f_chambre\\.forme", "L");
+await page.click('svg [data-coin="avant-gauche"]');
+check("salle en L : coin avant gauche retiré", await page.evaluate(() => MF.projet().chambre.forme === "L" && MF.projet().chambre.coin === "avant-gauche"));
+await page.fill("#f_chambre\\.coinLong", "2,5"); await page.press("#f_chambre\\.coinLong", "Enter");
+check("salle en L : taille du coin saisie", await page.evaluate(() => MF.projet().chambre.coinLong === 2.5));
+await page.screenshot({ path: path.join(SHOTS, "1b-salle-en-L.png") });
+await page.click("#bAnnuler"); await page.click("#bAnnuler"); await page.click("#bAnnuler");
+check("annuler : retour à la salle rectangulaire", await page.evaluate(() => MF.projet().chambre.forme === "rect"));
+
 // Calques
 for (const c of ["lignes", "coupe", "mortes", "couleurProduits"]) await page.click('[data-aff="' + c + '"]');
 check("coupe : barre de réglage affichée", await page.isVisible("#coupeBar"));

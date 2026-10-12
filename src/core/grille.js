@@ -1,6 +1,6 @@
 /* Maillage de la chambre en cellules cubiques (ou presque) : parois, évaporateurs, cloisons,
    obstacles pleins, échelles chargées traitées en milieu poreux. Commun à l'aperçu et au calcul fin. */
-import { dims, volume, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, distSegment } from "./geometrie.js";
+import { dims, volume, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, distSegment, dansEncoche } from "./geometrie.js";
 
 export const SOLIDE = { fluide: 0, paroi: 1, evap: 2, cloison: 3, obstacle: 4 };
 
@@ -31,7 +31,7 @@ export function construireGrille(projet, opts) {
   if (k.L) {
     for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
       const x = (i + 0.5) * dx, y = (j + 0.5) * dy;
-      if (x > k.a && y < k.B - k.b) for (let kk = 0; kk < nz; kk++) solide[id(i, j, kk)] = SOLIDE.paroi;
+      if (dansEncoche(k, x, y)) for (let kk = 0; kk < nz; kk++) solide[id(i, j, kk)] = SOLIDE.paroi;
     }
   }
   const boite = (b, val, f) => {

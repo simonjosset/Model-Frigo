@@ -141,9 +141,9 @@ export function demarrer() {
   function ajouterObjet(liste) {
     memoriser();
     const k = dims(projet.chambre), v = {};
-    if (liste === "evaps") { v.x = k.a / 2; v.y = 0.5; v.dir = 90; }
-    else if (liste === "echelles") { v.x = k.a / 2; v.y = k.B / 2; v.n = 4; v.rangees = 1; }
-    else if (liste === "portes") { v.x = k.a * 0.5; v.y = k.B; }
+    if (liste === "evaps") { v.x = k.W / 2; v.y = 0.5; v.dir = 90; }
+    else if (liste === "echelles") { v.x = k.W / 2; v.y = k.B / 2; v.n = 4; v.rangees = 1; }
+    else if (liste === "portes") { v.x = k.W * 0.5; v.y = k.B; }
     const o = ajouter(projet, liste, v);
     garderDedans(liste, o, projet.chambre);
     apresModif();
@@ -306,13 +306,14 @@ export function demarrer() {
 
   /* ---------- Événements ---------- */
   document.addEventListener("click", ev => {
-    const t = ev.target.closest("[data-oeil],[data-sel],[data-ajout],[data-act],[data-dir],[data-vue],[data-aff],[data-axe],[data-tab]");
+    const t = ev.target.closest("[data-oeil],[data-sel],[data-ajout],[data-act],[data-dir],[data-coin],[data-vue],[data-aff],[data-axe],[data-tab]");
     if (!t) return;
     if (t.dataset.oeil) { ev.stopPropagation(); const r = trouver(projet, t.dataset.oeil); if (r) { memoriser(); r.objet.off = !r.objet.off; apresModif(); } return; }
     if (t.dataset.sel) selectionner(t.dataset.sel);
     else if (t.dataset.ajout) ajouterObjet(t.dataset.ajout);
     else if (t.dataset.act) action(t.dataset.act);
     else if (t.dataset.dir) saisir(t.dataset.dir, t.dataset.v, "num", 1, false);
+    else if (t.dataset.coin) saisir("chambre.coin", t.dataset.coin, "sel");
     else if (t.dataset.vue) { if (vue) vue.vue(t.dataset.vue); }
     else if (t.dataset.aff) { aff[t.dataset.aff] = !aff[t.dataset.aff]; if (t.dataset.aff === "vecteurs" && aff.vecteurs) aff.coupe = true; majAffichage(); }
     else if (t.dataset.axe) { aff.axe = t.dataset.axe; aff.pos = null; majAffichage(); }

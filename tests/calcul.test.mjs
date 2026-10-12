@@ -8,7 +8,7 @@ import { vitesse } from "../src/core/champ.js";
 import { analyser } from "../src/core/analyse.js";
 import { simuler } from "../src/core/simulation.js";
 
-const salle = extra => normaliser(Object.assign({ chambre: { a: 10, B: 6, H: 3.5 }, evaps: [{ nom: "E", x: 0.6, y: 3, dir: 0, len: 1.8, dep: 0.5, eh: 0.5, nf: 2, dv: 0.45, q: 6000, T: 7 }] }, extra || {}));
+const salle = extra => normaliser(Object.assign({ chambre: { longueur: 10, largeur: 6, H: 3.5 }, evaps: [{ nom: "E", x: 0.6, y: 3, dir: 0, len: 1.8, dep: 0.5, eh: 0.5, nf: 2, dv: 0.45, q: 6000, T: 7 }] }, extra || {}));
 
 test("maillage : évaporateur plein, cloison pleine hauteur étanche, échelles poreuses", () => {
   const p = salle({ cloisons: [{ x0: 5, y0: 0, x1: 5, y1: 6 }], echelles: [{ x: 2.5, y: 3, n: 2, rangees: 1 }] });
@@ -56,7 +56,7 @@ test("calcul fin : le jet porte vers l'avant et l'air revient vers l'appareil", 
 });
 
 test("simulation complète sur un petit maillage, avec recalage", () => {
-  const p = salle({ chambre: { a: 14, B: 5, H: 3.5 } });
+  const p = salle({ chambre: { longueur: 14, largeur: 5, H: 3.5 } });
   const F = simuler(p, { cellules: 9000 });
   assert.equal(F.info.methode, "cfd");
   assert.ok(F.info.passes >= 1 && F.info.passes <= 3);
@@ -64,7 +64,7 @@ test("simulation complète sur un petit maillage, avec recalage", () => {
 });
 
 test("analyse : alertes sans évaporateur et chevauchement d'objets", () => {
-  const p = normaliser({ chambre: { a: 6, B: 5, H: 3 }, obstacles: [{ x: 2, y: 2, L: 1, l: 1, h: 1 }, { x: 2.3, y: 2.2, L: 1, l: 1, h: 1 }] });
+  const p = normaliser({ chambre: { longueur: 6, largeur: 5, H: 3 }, obstacles: [{ x: 2, y: 2, L: 1, l: 1, h: 1 }, { x: 2.3, y: 2.2, L: 1, l: 1, h: 1 }] });
   const R = analyser(p, calculerApercu(p));
   assert.ok(R.alertes.some(a => a.titre === "Aucun évaporateur"));
   assert.ok(R.alertes.some(a => /se chevauchent/.test(a.texte)));
