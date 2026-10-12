@@ -92,6 +92,16 @@ const res = await page.textContent("#pane-res");
 check("résultats : volume bien brassé et contrôles", /Volume bien brassé/.test(res) && /Contrôles/.test(res) && /Calcul fin/.test(res));
 await page.screenshot({ path: path.join(SHOTS, "3-calcul-fin.png") });
 
+// Vitesse de l'air par étage dans les échelles
+await page.click('[data-sel="' + idE + '"]');
+check("échelles : tableau des vitesses par étage", await page.isVisible(".vgrille") && await page.isVisible('[data-csv]'));
+await page.click('.vg-c[data-ech="3,4"]');
+const lu = await page.textContent("#sonde");
+check("échelles : vitesse lue sur une case (échelle 4, étage 5)", /m\/s au-dessus des produits/.test(lu) && /étage 5/.test(lu), lu.replace(/\s+/g, " ").slice(0, 90));
+const csv = await Promise.all([page.waitForEvent("download"), page.click('[data-csv]')]).then(([d]) => d.suggestedFilename());
+check("échelles : export CSV des vitesses", /vitesses\.csv$/.test(csv), csv);
+await page.screenshot({ path: path.join(SHOTS, "3b-vitesses-produits.png") });
+
 // Modification après calcul : résultat signalé à relancer
 const idEv = await page.evaluate(() => MF.projet().evaps[0].id);
 await page.click('[data-sel="' + idEv + '"]');

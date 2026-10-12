@@ -36,7 +36,7 @@ export function demarrer() {
   if (webglDisponible()) {
     try {
       vue = creerVue($("vue3d"), {
-        onPick: id => selectionner(id || "chambre"),
+        onPick: (id, produit) => { selectionner(id || "chambre"); if (produit) choisirProduit(id, produit.chariot, produit.niveau); },
         onDrag: (id, v) => deplacer(id, v),
         onDragFin: () => { glisse = false; demanderApercu(true); rendreProp(); },
         onSonde: s => afficherSonde(s)
@@ -71,7 +71,7 @@ export function demarrer() {
     const c = champs[mode] || champs.apercu;
     if (vue && c) {
       const vit = {};
-      (c.R.echelles || []).forEach(e => { vit[e.id] = e.chariots.map(x => x.v); });
+      (c.R.echelles || []).forEach(e => { vit[e.id] = e.chariots.map(x => x.etages.map(t => t.v)); });
       vue.flux.setSources(sources());
       vue.setChamp(c.F, vit);
     }
@@ -232,7 +232,7 @@ export function demarrer() {
     if (sel === "chambre") { p.innerHTML = panneauChambre(projet); return; }
     const t = trouver(projet, sel);
     if (!t) { sel = "chambre"; p.innerHTML = panneauChambre(projet); return; }
-    p.innerHTML = panneauObjet(projet, t.liste, t.objet, analyseCourante());
+    p.innerHTML = panneauObjet(projet, t.liste, t.objet, analyseCourante(), { produitSel: produitSel && produitSel.id === sel ? produitSel : null, mode });
   }
   function rendreReglages() { $("pane-regl").innerHTML = panneauReglages(projet, aff); }
   function rendreResultats() {
@@ -297,6 +297,17 @@ export function demarrer() {
     if (vue) vue.setAffichage(Object.assign({}, aff, { vmin: projet.reglages.vmin }));
     try { localStorage.setItem("modele-frigo-affichage", JSON.stringify(aff)); } catch (e) { /* rien */ }
   }
+  /* Vitesse de l'air au-dessus d'un produit (clic sur un produit ou une case du tableau) */
+  let produitSel = null;
+  function choisirProduit(id, chariot, niveau) {
+    produitSel = { id, chariot, niveau };
+    const R = analyseCourante(), e = R && R.echelles.find(x => x.id === id), c = e && e.chariots[chariot], t = c && c.etages[niveau];
+    const el = $("sonde");
+    if (!t) { el.hidden = true; return; }
+    el.hidden = false;
+    el.innerHTML = "<b>" + fr(t.v, 2) + " m/s</b> au-dessus des produits<br><span style=\"color:var(--muted)\">" + esc(e.nom) + " · rangée " + (c.rang + 1) + ", échelle " + (chariot % e.n + 1) + " · étage " + (niveau + 1) + " (z " + fr(t.z, 2) + " m)<br>dans les passages entre produits ≈ " + fr(t.vPassage, 2) + " m/s" + (mode === "apercu" ? "<br>Aperçu : lancez le calcul fin pour une valeur fiable" : "") + "</span>";
+    if (onglet === "prop") rendreProp();
+  }
   function afficherSonde(s) {
     const el = $("sonde");
     if (!s) { el.hidden = true; return; }
@@ -306,7 +317,7 @@ export function demarrer() {
 
   /* ---------- Événements ---------- */
   document.addEventListener("click", ev => {
-    const t = ev.target.closest("[data-oeil],[data-sel],[data-ajout],[data-act],[data-dir],[data-coin],[data-vue],[data-aff],[data-axe],[data-tab]");
+    const t = ev.target.closest("[data-oeil],[data-sel],[data-ajout],[data-act],[data-dir],[data-coin],[data-ech],[data-csv],[data-vue],[data-aff],[data-axe],[data-tab]");
     if (!t) return;
     if (t.dataset.oeil) { ev.stopPropagation(); const r = trouver(projet, t.dataset.oeil); if (r) { memoriser(); r.objet.off = !r.objet.off; apresModif(); } return; }
     if (t.dataset.sel) selectionner(t.dataset.sel);
@@ -314,6 +325,8 @@ export function demarrer() {
     else if (t.dataset.act) action(t.dataset.act);
     else if (t.dataset.dir) saisir(t.dataset.dir, t.dataset.v, "num", 1, false);
     else if (t.dataset.coin) saisir("chambre.coin", t.dataset.coin, "sel");
+    else if (t.dataset.ech) { const [c, n] = t.dataset.ech.split(",").map(Number); choisirProduit(sel, c, n); }
+    else if (t.dataset.csv) exporterVitesses(t.dataset.csv);
     else if (t.dataset.vue) { if (vue) vue.vue(t.dataset.vue); }
     else if (t.dataset.aff) { aff[t.dataset.aff] = !aff[t.dataset.aff]; if (t.dataset.aff === "vecteurs" && aff.vecteurs) aff.coupe = true; majAffichage(); }
     else if (t.dataset.axe) { aff.axe = t.dataset.axe; aff.pos = null; majAffichage(); }
@@ -364,6 +377,19 @@ export function demarrer() {
     if (!vue) return;
     const a = document.createElement("a"); a.href = vue.toPNG(); a.download = nomFichier(projet.nom) + ".png"; document.body.appendChild(a); a.click(); a.remove();
   };
+
+  /* Export CSV (tableur) des vitesses par échelle et par étage */
+  function exporterVitesses(id) {
+    const R = analyseCourante(), e = R && R.echelles.find(x => x.id === id); if (!e) return;
+    const n = (v, d) => fr(v, d).replace(/\s/g, "");
+    let t = "Groupe;Calcul;Rangée;Échelle;Étage;Hauteur (m);Vitesse au-dessus des produits (m/s);Vitesse dans les passages (m/s)\n";
+    e.chariots.forEach((c, k) => c.etages.forEach((x, j) => {
+      t += [e.nom, mode === "cfd" ? "calcul fin" : "aperçu", c.rang + 1, k % e.n + 1, j + 1, n(x.z, 2), n(x.v, 3), n(x.vPassage, 3)].join(";") + "\n";
+    }));
+    const b = new Blob(["\ufeff" + t], { type: "text/csv" }), a = document.createElement("a");
+    a.href = URL.createObjectURL(b); a.download = nomFichier(projet.nom + "-" + e.nom) + "-vitesses.csv"; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
 
   /* ---------- Projets ---------- */
   function rendreProjets() {

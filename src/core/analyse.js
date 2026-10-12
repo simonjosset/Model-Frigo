@@ -63,17 +63,26 @@ export function analyser(projet, F) {
   for (const eg of G.echelles) {
     const e = eg.e, geo = eg.geo, info = geo.info, ch = [];
     R.totaux.echelles += geo.total; R.totaux.produits += geo.total * info.nb; R.totaux.masse += geo.total * info.masse;
+    // Par étage : vitesse dans la lame d'air au-dessus de chaque rang de produits (9 points répartis sur
+    // l'emprise de l'échelle). Le maillage ne voit pas chaque produit : c'est la vitesse moyenne sur la
+    // section de l'échelle ; dans les passages libres entre produits, l'air va plus vite (÷ part de passage).
+    const phi = Math.max(0.05, geo.res.phiH), o3 = [0, 0, 0];
     for (const c of geo.chariots) {
-      const [i0, i1] = plage(c.x0, c.x1, G.dx, G.nx), [j0, j1] = plage(c.y0, c.y1, G.dy, G.ny), [k0, k1] = plage(info.zBas, Math.max(info.zBas + 0.05, info.zHaut), G.dz, G.nz);
-      let s = 0, cnt = 0, mn = Infinity;
-      for (let kk = k0; kk <= k1; kk++) for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
-        const id = i + G.nx * (j + G.ny * kk); if (G.solide[id]) continue;
-        s += F.mag[id]; cnt++; if (F.mag[id] < mn) mn = F.mag[id];
-      }
-      ch.push({ v: cnt ? s / cnt : 0, vMin: cnt ? mn : 0 });
+      const etages = info.niveaux.map((nv, k) => {
+        const haut = k + 1 < info.niveaux.length ? info.niveaux[k + 1].z : Math.min(info.H - 0.02, nv.z + info.pasEff);
+        const z = Math.min(G.H - 0.01, (nv.z + info.produit.h + haut) / 2);
+        let s = 0, n9 = 0;
+        for (const fx of [0.2, 0.5, 0.8]) for (const fy of [0.2, 0.5, 0.8]) {
+          s += vitesse(F, c.x0 + (c.x1 - c.x0) * fx, c.y0 + (c.y1 - c.y0) * fy, z, o3); n9++;
+        }
+        const v = s / n9;
+        return { z, v, vPassage: v / phi };
+      });
+      const vs0 = etages.map(x => x.v);
+      ch.push({ v: vs0.length ? vs0.reduce((a, b) => a + b, 0) / vs0.length : 0, vMin: vs0.length ? Math.min.apply(null, vs0) : 0, vMax: vs0.length ? Math.max.apply(null, vs0) : 0, etages, rang: c.rang });
     }
     const vs = ch.map(c => c.v), moy = vs.length ? vs.reduce((a, b) => a + b, 0) / vs.length : 0;
-    R.echelles.push({ id: e.id, nom: e.nom, chariots: ch, vMoy: moy, vMin: vs.length ? Math.min.apply(null, vs) : 0, info });
+    R.echelles.push({ id: e.id, nom: e.nom, chariots: ch, vMoy: moy, vMin: vs.length ? Math.min.apply(null, ch.map(c => c.vMin)) : 0, phi, n: e.n, info });
     info.alertes.forEach(t => A("warn", e.nom + " : chargement", t, e.id));
     if (info.nb) {
       const faibles = ch.filter(c => c.v < vmin).length;

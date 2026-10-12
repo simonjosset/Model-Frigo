@@ -11,7 +11,8 @@ Modélisation 3D d'une chambre froide, de ses évaporateurs et des flux d'air pr
 - **Flux d'air** :
   - *Aperçu* instantané, recalculé à chaque modification : modèle de jets empirique (jet collé au plafond, arrivée sur la paroi d'en face, retour d'air au sol) ;
   - *Calcul fin* sur un bouton : équations de Navier-Stokes isothermes sur une grille de cellules, dans un worker. Les jets sont recalés sur la portée constructeur (2 à 3 passes) quand l'espace libre permet de la mesurer. Les échelles chargées freinent l'air comme un milieu poreux.
-- **Visualisation** : particules animées, lignes de courant depuis chaque hélice, plan de coupe horizontal ou vertical coloré par la vitesse (avec flèches et sonde au clic), enveloppe des zones mortes, produits colorés selon la vitesse de l'air qui les traverse.
+- **Visualisation** : particules animées, lignes de courant depuis chaque hélice, plan de coupe horizontal ou vertical coloré par la vitesse (avec flèches et sonde au clic), enveloppe des zones mortes, produits colorés étage par étage selon la vitesse de l'air qui passe dessus.
+- **Vitesse sur les produits** : tableau par échelle et par étage dans le panneau du groupe d'échelles, lecture au clic sur une case ou sur un produit de la 3D (vitesse moyenne dans la lame d'air au-dessus du rang de produits, et estimation dans les passages entre produits), export CSV pour le tableur.
 - **Résultats** : volume bien brassé, taux de brassage, vitesse moyenne, vitesse à travers les produits, courant d'air en zone de travail, portée de chaque jet, vitesse dans chaque échelle, contrôles (portée insuffisante ou surdimensionnée, soufflage vers une porte, jet gêné, reprise d'air gênée, produits peu ventilés, objets qui se chevauchent).
 - Projets enregistrés sur l'appareil, export et import en JSON, annuler / rétablir, image PNG de la vue, thèmes sombre et clair.
 

@@ -2,6 +2,7 @@
 import { CATALOGUE } from "../core/produits.js";
 import { dims, surface, volume, evapGeo, echellesGeo, cloisonGeo, polygone, COINS } from "../core/geometrie.js";
 import { MAILLES } from "../core/modele.js";
+import { couleur } from "../core/champ.js";
 
 export function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 export function fr(x, d) { return (+x).toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d }); }
@@ -117,7 +118,8 @@ function panneauEvap(p, e, R) {
 }
 
 /* ---------- Échelles ---------- */
-function panneauEchelles(p, e, R) {
+function panneauEchelles(p, e, R, opts) {
+  opts = opts || {};
   const g = echellesGeo(e), i = g.info;
   let h = titre(e, "Groupe d'échelles chargées · " + g.total + " échelle" + (g.total > 1 ? "s" : ""));
   h += '<div class="sec"><h4>Implantation</h4><div class="grid">' + num(e, "n", "Échelles par rangée", "", { dec: 0 }) + num(e, "rangees", "Rangées", "", { dec: 0 }) +
@@ -141,8 +143,9 @@ function panneauEchelles(p, e, R) {
     ["Étages chargés", i.charges + " sur " + i.maxNiveaux],
     ["Par échelle", i.nb + " produits · " + fr(i.masse, 1) + " kg"],
     Object.assign(["Groupe (" + g.total + " échelles)", fr(g.total * i.nb, 0) + " produits · " + fr(g.total * i.masse / 1000, 2) + " t"], { tot: true }),
-    ec && i.nb ? ["Air à travers les produits", "moy. " + fr(ec.vMoy, 2) + " · min. " + fr(ec.vMin, 2) + " m/s"] : null
+    ec && i.nb ? ["Air au-dessus des produits", "moy. " + fr(ec.vMoy, 2) + " · min. " + fr(ec.vMin, 2) + " m/s"] : null
   ]);
+  if (ec && i.nb) h += tableauVitesses(ec, opts);
   if (i.alertes.length) h += i.alertes.map(t => '<p class="hint" style="color:var(--yellow)">' + esc(t) + "</p>").join("");
   h += "</div>" + actions("echelles", e);
   return h;
@@ -174,9 +177,36 @@ function panneauPorte(p, d) {
   return h;
 }
 
-export function panneauObjet(p, liste, o, R) {
+/* Vitesse de l'air par échelle (colonnes) et par étage (lignes, le haut en haut) */
+function tableauVitesses(ec, opts) {
+  const ps = opts.produitSel, nE = ec.chariots.length, nN = ec.info.charges;
+  let h = '<div class="sec"><h4>Vitesse de l\'air au-dessus des produits</h4>';
+  if (opts.mode !== "cfd") h += '<p class="hint" style="color:var(--yellow);margin:0 0 8px">Valeurs de l\'aperçu : lancez le calcul fin pour des vitesses fiables à travers les échelles.</p>';
+  h += '<div class="vgrille" style="grid-template-columns:34px repeat(' + nE + ',minmax(0,1fr))"><span class="vg-h"></span>';
+  ec.chariots.forEach((c, k) => { h += '<span class="vg-h" title="Rangée ' + (c.rang + 1) + ", échelle " + (k % ec.n + 1) + '">' + (k % ec.n + 1) + "</span>"; });
+  for (let j = nN - 1; j >= 0; j--) {
+    h += '<span class="vg-h">' + (j + 1) + "</span>";
+    ec.chariots.forEach((c, k) => {
+      const t = c.etages[j], col = couleurCss(t.v), on = ps && ps.chariot === k && ps.niveau === j;
+      h += '<button type="button" class="vg-c' + (on ? " on" : "") + '" data-ech="' + k + "," + j + '" style="background:' + col + '" title="Rangée ' + (c.rang + 1) + ", échelle " + (k % ec.n + 1) + ", étage " + (j + 1) + " : " + fr(t.v, 2) + ' m/s"></button>';
+    });
+  }
+  h += "</div>";
+  h += '<p class="hint">Lignes : étages (1 = en bas). Colonnes : échelles numérotées dans chaque rangée' + (nE > ec.n ? " (rangée 1 puis rangée 2…)" : "") + '. Cliquez une case, ou un produit dans la 3D, pour lire la vitesse.</p>';
+  if (ps && ec.chariots[ps.chariot]) {
+    const c = ec.chariots[ps.chariot];
+    h += '<table class="tab-mini" style="margin-top:8px"><tr><th>Rangée ' + (c.rang + 1) + ", échelle " + (ps.chariot % ec.n + 1) + '</th><th class="n">Hauteur</th><th class="n">Au-dessus</th><th class="n">Passages</th></tr>' +
+      c.etages.map((t, j) => "<tr" + (j === ps.niveau ? ' style="color:var(--accent)"' : "") + "><td>Étage " + (j + 1) + '</td><td class="n">' + fr(t.z, 2) + ' m</td><td class="n">' + fr(t.v, 2) + ' m/s</td><td class="n">' + fr(t.vPassage, 2) + " m/s</td></tr>").reverse().join("") + "</table>";
+  }
+  h += '<p class="hint">« Au-dessus » : vitesse moyenne de l\'air dans la lame entre deux étages, sur toute l\'emprise de l\'échelle (le maillage ne distingue pas chaque produit). « Passages » : estimation dans les espaces libres entre produits, où l\'air se resserre (part de passage ' + fr(ec.phi * 100, 0) + ' %). Pour plus de détail, choisissez le maillage fin dans les Réglages.</p>';
+  h += '<div class="actions" style="margin-top:8px"><button type="button" class="b-ghost" data-csv="' + ec.id + '">Exporter les vitesses (CSV)</button></div></div>';
+  return h;
+}
+function couleurCss(v) { const c = couleur(v); return "rgb(" + c.map(Math.round).join(",") + ")"; }
+
+export function panneauObjet(p, liste, o, R, opts) {
   if (liste === "evaps") return panneauEvap(p, o, R);
-  if (liste === "echelles") return panneauEchelles(p, o, R);
+  if (liste === "echelles") return panneauEchelles(p, o, R, opts);
   if (liste === "cloisons") return panneauCloison(p, o);
   if (liste === "obstacles") return panneauObstacle(p, o);
   return panneauPorte(p, o);

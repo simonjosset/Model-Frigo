@@ -213,7 +213,7 @@ export function creerVue(conteneur, cb) {
       tmpO.scale.set(sx, sy, sz); tmpO.updateMatrix(); return tmpO.matrix;
     };
     let ib = 0, ir = 0, ip = 0;
-    const base = [];
+    const base = [], niv = [];
     geo.chariots.forEach((c, n) => {
       barres.forEach(bb => mB.setMatrixAt(ib++, place(c, bb[0], bb[1], bb[2], bb[3], bb[4], bb[5])));
       [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([i, j]) => {
@@ -222,13 +222,13 @@ export function creerVue(conteneur, cb) {
       });
       if (mP) prods.forEach(pr => {
         mP.setMatrixAt(ip, place(c, pr.x, pr.y, pr.z + pr.sz / 2, pr.sx, pr.sy, pr.sz));
-        base.push(PASTELS[(pr.niveau + n) % PASTELS.length]);
+        base.push(PASTELS[(pr.niveau + n) % PASTELS.length]); niv.push(pr.niveau);
         mP.setColorAt(ip, tmpC.setHex(base[ip]));
         ip++;
       });
     });
     g.add(mB); g.add(mR);
-    if (mP) { mP.userData.produits = { n: prods.length, chariots: nCh }; mP.userData.base = base; g.add(mP); g.userData.mP = mP; }
+    if (mP) { mP.userData.produits = { n: prods.length, chariots: nCh }; mP.userData.base = base; mP.userData.niv = niv; g.add(mP); g.userData.mP = mP; }
     return g;
   }
   function colorerProduits() {
@@ -237,7 +237,8 @@ export function creerVue(conteneur, cb) {
       const id = o.userData.id, ve = vitEchelles && vitEchelles[id], n = mP.userData.produits.n;
       for (let c = 0; c < mP.userData.produits.chariots; c++) for (let q = 0; q < n; q++) {
         const i = c * n + q;
-        if (aff.couleurProduits && ve && ve[c] != null) { const col = flux.couleurVitesse(ve[c]); tmpC.setRGB(col[0] / 255, col[1] / 255, col[2] / 255).convertSRGBToLinear(); }
+        const vv = ve && ve[c] && ve[c][mP.userData.niv[i]];
+        if (aff.couleurProduits && vv != null) { const col = flux.couleurVitesse(vv); tmpC.setRGB(col[0] / 255, col[1] / 255, col[2] / 255).convertSRGBToLinear(); }
         else tmpC.setHex(mP.userData.base[i]);
         mP.setColorAt(i, tmpC);
       }
@@ -356,7 +357,14 @@ export function creerVue(conteneur, cb) {
     viser(ev);
     if (poignees.length) { const hp = ray.intersectObjects(poignees, false); if (hp.length) return { poignee: hp[0].object.userData.poignee }; }
     const hits = ray.intersectObjects(pickables, true);
-    for (const h of hits) { let o = h.object; while (o && !(o.userData && o.userData.id)) o = o.parent; if (o) return { id: o.userData.id, liste: o.userData.liste, point: h.point }; }
+    for (const h of hits) {
+      let o = h.object; const mP = o.userData && o.userData.produits ? o : null;
+      while (o && !(o.userData && o.userData.id)) o = o.parent;
+      if (!o) continue;
+      // Produit d'une échelle : numéro de l'échelle dans le groupe et étage
+      const produit = mP && h.instanceId != null ? { chariot: Math.floor(h.instanceId / mP.userData.produits.n), niveau: mP.userData.niv[h.instanceId] } : null;
+      return { id: o.userData.id, liste: o.userData.liste, point: h.point, produit };
+    }
     return null;
   }
   function solSous(ev, z) { viser(ev); plan.constant = -(z || 0); return ray.ray.intersectPlane(plan, hitP) ? hitP.clone() : null; }
@@ -401,7 +409,7 @@ export function creerVue(conteneur, cb) {
     viser(ev);
     const s = flux.sonde(ray);
     const o = objetSous(ev);
-    if (o && o.id) { cb.onPick && cb.onPick(o.id); return; }
+    if (o && o.id) { cb.onPick && cb.onPick(o.id, o.produit); return; }
     if (s) { cb.onSonde && cb.onSonde(s); return; }
     cb.onPick && cb.onPick(null);
   });

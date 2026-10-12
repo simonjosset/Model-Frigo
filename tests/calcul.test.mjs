@@ -73,5 +73,9 @@ test("analyse : alertes sans évaporateur et chevauchement d'objets", () => {
 test("projet d'exemple : analyse complète sans erreur", () => {
   const p = projetExemple(), R = analyser(p, calculerApercu(p));
   assert.equal(R.totaux.echelles, 14);
+  const ec = R.echelles[0];
+  assert.equal(ec.chariots.length, 14);
+  assert.equal(ec.chariots[0].etages.length, ec.info.charges, "une vitesse par étage chargé");
+  for (const c of ec.chariots) for (const t of c.etages) assert.ok(t.v >= 0 && t.vPassage >= t.v && t.z > 0 && t.z < 1.875);
   assert.ok(R.produits.n > 0 && R.taux > 30);
 });
