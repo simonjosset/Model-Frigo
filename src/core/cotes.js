@@ -1,6 +1,6 @@
 /* Cotes (mesures de longueur point à point) : points d'accroche de la chambre et des objets, mesure.
    Module pur. Une cote est enregistrée dans le projet : { id, a: [x, y, z], b: [x, y, z] }. */
-import { dims, polygone, pieceGeo, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteCloison, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "./geometrie.js";
+import { dims, polygone, pieceGeo, personneGeo, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteCloison, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "./geometrie.js";
 
 /* Sommets d'une boîte alignée sur les axes */
 function sommetsBoite(b, nom, out) {
@@ -48,6 +48,7 @@ export function pointsAccroche(projet) {
   });
   projet.deflecteurs.forEach(o => sommetsBoite(deflecteurGeo(o, ch).box, o.nom, out));
   (projet.pieces || []).forEach(o => sommetsBoite(pieceGeo(o).box, o.nom, out));
+  (projet.personnes || []).forEach(o => { out.push({ p: [o.x, o.y, o.taille], nom: o.nom + " · haut de la tête" }); out.push({ p: [o.x, o.y, 0], nom: o.nom + " · pieds" }); });
   return out;
 }
 

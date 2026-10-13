@@ -55,11 +55,25 @@ await page.waitForTimeout(300);
 check("pièce : décor, l'aperçu n'est pas recalculé", await page.evaluate(() => window.__nApercu === 0), await page.evaluate(() => window.__nApercu));
 await page.click('[data-vue="iso"]'); await page.waitForTimeout(600);
 await page.screenshot({ path: path.join(SHOTS, "1d-pieces.png") });
-await page.click('[data-aff="pieces"]'); await page.waitForTimeout(200);
+await page.uncheck('[data-affchk="pieces"]'); await page.waitForTimeout(200);
+check("case à cocher : pièces voisines masquées, bouton du calque synchronisé", await page.evaluate(() => document.querySelector('[data-aff="pieces"]').getAttribute("aria-pressed") === "false"));
 check("calque Pièces : masquées", await page.evaluate(() => !document.querySelector(".etq.pc") || getComputedStyle(document.querySelector(".etq.pc")).display === "none"));
 await page.click('[data-aff="pieces"]');
+check("bouton du calque : pièces réaffichées, case recochée", await page.isChecked('[data-affchk="pieces"]'));
 for (let i = 0; i < 3; i++) await page.click("#bAnnuler");
 check("annuler : pièce retirée", await page.evaluate(() => MF.projet().pieces.length === 1));
+
+// Personne debout : repère d'échelle
+await page.waitForTimeout(300); await page.evaluate(() => { window.__nApercu = 0; });
+await page.click('[data-ajout="personnes"]');
+check("personne ajoutée (1,75 m), étiquette dans la 3D", await page.evaluate(() => MF.projet().personnes.length === 1 && MF.projet().personnes[0].taille === 1.75) && /Personne 1 · 1,75 m/.test(await page.textContent(".vue3d-etiquettes")));
+await page.fill("#f_taille", "1,82"); await page.press("#f_taille", "Enter");
+check("personne : taille saisie", await page.evaluate(() => MF.projet().personnes[0].taille === 1.82));
+check("personne : décor, l'aperçu n'est pas recalculé", await page.evaluate(() => window.__nApercu === 0), await page.evaluate(() => window.__nApercu));
+await page.waitForTimeout(300);
+await page.screenshot({ path: path.join(SHOTS, "1e-personne.png") });
+await page.click("#bAnnuler"); await page.click("#bAnnuler");
+check("annuler : personne retirée", await page.evaluate(() => MF.projet().personnes.length === 0));
 
 // Cloison ajoutée puis modifiée par le panneau
 await page.click('[data-ajout="cloisons"]');
