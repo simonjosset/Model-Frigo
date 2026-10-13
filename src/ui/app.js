@@ -1,11 +1,12 @@
 /* Modèle Frigo : contrôleur de l'interface (sélection, édition, annulation, calculs, résultats, projets). */
-import { normaliser, normaliserObjet, ajouter, dupliquer, trouver, projetExemple, TYPES, LISTES } from "../core/modele.js";
+import { normaliser, normaliserObjet, normaliserCote, ajouter, dupliquer, trouver, projetExemple, TYPES, LISTES } from "../core/modele.js";
 import { dims, volume, evapGeo, echellesGeo, garderDedans } from "../core/geometrie.js";
 import { produitDuCatalogue } from "../core/produits.js";
 import { creerStore } from "./store.js";
 import { creerCalculs } from "./calculs.js";
 import { panneauChambre, panneauObjet, panneauReglages, resumeObjet, lireNombre, esc, fr } from "./formulaires.js";
 import { creerVue, webglDisponible } from "../vue3d/vue.js";
+import { mesure } from "../core/cotes.js";
 import { PALIERS, GRADUATIONS, VMAX_ECHELLE, positionEchelle } from "../core/champ.js";
 
 const $ = id => document.getElementById(id);
@@ -40,7 +41,10 @@ export function demarrer() {
         onPick: (id, produit) => { selectionner(id || "chambre"); if (produit) choisirProduit(id, produit.chariot, produit.niveau); },
         onDrag: (id, v) => deplacer(id, v),
         onDragFin: () => { glisse = false; demanderApercu(true); rendreProp(); },
-        onSonde: s => afficherSonde(s)
+        onSonde: s => afficherSonde(s),
+        onCote: (a, b) => { memoriser(); const c = normaliserCote({ a, b }); projet.cotes.push(c); derniereCote = mesure(c.a, c.b); majCotes(); },
+        onCoteSuppr: id => { memoriser(); projet.cotes = projet.cotes.filter(c => c.id !== id); majCotes(); },
+        onCoteSurvol: info => afficherCote(info)
       });
     } catch (e) { vue = null; }
   }
@@ -78,7 +82,7 @@ export function demarrer() {
     }
     $("legMode").textContent = mode === "cfd" ? "Calcul fin" + (cfdPerime ? " (à relancer)" : "") : "Aperçu instantané";
     $("mApercu").setAttribute("aria-pressed", mode === "apercu"); $("mCfd").setAttribute("aria-pressed", mode === "cfd");
-    $("sonde").hidden = true;
+    if (vue && vue.coter()) afficherCote(derniereInfo); else $("sonde").hidden = true;
     rendreResultats(); rendreResume();
     if (onglet === "prop") rendreProp();
   }
@@ -126,6 +130,7 @@ export function demarrer() {
 
   function selectionner(id) {
     sel = id || "chambre";
+    if (sel !== "chambre" && vue && vue.coter()) modeCote(false);
     if (vue) vue.selection(sel === "chambre" ? null : sel);
     if (onglet !== "prop") choisirOnglet("prop");
     rendreListes(); rendreProp();
@@ -329,6 +334,46 @@ export function demarrer() {
     el.innerHTML = "<b>" + fr(s.m, 2) + " m/s</b><br><span style=\"color:var(--muted)\">x " + fr(s.x, 2) + " · y " + fr(s.y, 2) + " · z " + fr(s.z, 2) + " m<br>vx " + fr(s.u, 2) + " · vy " + fr(s.v, 2) + " · vz " + fr(s.w, 2) + "</span>";
   }
 
+  /* ---------- Cotes ---------- */
+  let derniereCote = null;
+  function majCotes() {
+    store.enregistrer(projet);
+    if (vue) vue.setProjet(projet, true);
+    afficherCote(derniereInfo);
+  }
+  function modeCote(on) {
+    if (!vue) return;
+    derniereCote = null;
+    vue.setCoter(on);
+    $("bCote").setAttribute("aria-pressed", !!on);
+    if (on && sel !== "chambre") selectionner("chambre");
+  }
+  let derniereInfo = null;
+  /* Panneau de mesure : consigne, point visé, longueur en cours et écarts suivant les axes */
+  function afficherCote(info) {
+    derniereInfo = info;
+    const el = $("sonde");
+    if (!info) { el.hidden = true; return; }
+    el.hidden = false;
+    let h;
+    if (info.mesure) {
+      const m = info.mesure;
+      h = '<span class="cote-l">' + fr(m.L, 2) + " m</span><br><span style=\"color:var(--muted)\">Δx " + fr(m.dx, 2) + " · Δy " + fr(m.dy, 2) + " · Δz " + fr(m.dz, 2) + " m" + (m.dz > 0.005 && m.plan > 0.005 ? "<br>en plan : " + fr(m.plan, 2) + " m" : "") + "</span>";
+    } else if (derniereCote && !info.premier) {
+      const m = derniereCote;
+      h = 'Cote posée : <span class="cote-l">' + fr(m.L, 2) + " m</span><br><span style=\"color:var(--muted)\">Δx " + fr(m.dx, 2) + " · Δy " + fr(m.dy, 2) + " · Δz " + fr(m.dz, 2) + " m</span><br><span style=\"color:var(--muted)\">Visez le premier point de la cote suivante.</span>";
+    } else h = "<b style=\"font-size:14px\">Mode cote</b><br><span style=\"color:var(--muted)\">" + (info.premier ? "Visez le second point." : "Visez un premier point : coins des murs, des objets, bouts des retombées…") + "</span>";
+    if (info.point) h += '<br><span style="color:var(--faint)">' + (info.accroche ? "● " + esc(info.nom || "Accroche") : "○ point libre") + " · x " + fr(info.point[0], 2) + " · y " + fr(info.point[1], 2) + " · z " + fr(info.point[2], 2) + "</span>";
+    h += '<p class="hint" style="margin:6px 0 0">Accroche aux points remarquables (Maj : point libre) · glisser : tourner la vue · Échap : annuler</p>';
+    h += '<div class="cote-a">' + (projet.cotes.length ? '<button type="button" class="b-ghost" id="bCotesEff">Effacer les ' + projet.cotes.length + " cote" + (projet.cotes.length > 1 ? "s" : "") + "</button>" : "") + '<button type="button" class="b-ghost" id="bCoteFin">Terminer</button></div>';
+    el.innerHTML = h;
+  }
+  $("bCote").onclick = () => modeCote(!(vue && vue.coter()));
+  $("sonde").addEventListener("click", ev => {
+    if (ev.target.id === "bCoteFin") modeCote(false);
+    else if (ev.target.id === "bCotesEff") { memoriser(); projet.cotes = []; majCotes(); }
+  });
+
   /* ---------- Événements ---------- */
   document.addEventListener("click", ev => {
     const t = ev.target.closest("[data-oeil],[data-sel],[data-ajout],[data-act],[data-dir],[data-coin],[data-ech],[data-csv],[data-vue],[data-aff],[data-axe],[data-tab]");
@@ -361,6 +406,8 @@ export function demarrer() {
     else if (ctrl && ev.key.toLowerCase() === "d" && sel !== "chambre") { ev.preventDefault(); action("dupliquer"); }
     else if ((ev.key === "Delete" || ev.key === "Backspace") && sel !== "chambre") { ev.preventDefault(); action("supprimer"); }
     else if (ev.key.toLowerCase() === "r" && !ctrl && sel !== "chambre") action("pivoter");
+    else if (ev.key.toLowerCase() === "m" && !ctrl) modeCote(!(vue && vue.coter()));
+    else if (ev.key === "Escape" && vue && vue.coter()) { if (!vue.annulerPoint()) modeCote(false); }
     else if (ev.key === "Escape") selectionner("chambre");
     else if (ev.key.startsWith("Arrow") && sel !== "chambre") {
       const t = trouver(projet, sel); if (!t) return;
@@ -417,6 +464,7 @@ export function demarrer() {
     projet = p; sel = "chambre"; annuler = []; retablir = []; majHisto();
     champs.apercu = null; champs.cfd = null; cfdPerime = false; mode = "apercu"; calculs.stop(); $("prog").hidden = true;
     aff.pos = null; majAffichage();
+    if (vue && vue.coter()) modeCote(false);
     if (vue) { vue.setProjet(projet, false); vue.selection(null); }
     rendreListes(); rendreResume(); rendreProp(); rendreReglages(); majBoutonsCalcul();
     demanderApercu(true);
@@ -454,7 +502,7 @@ export function demarrer() {
   demanderApercu(true);
   window.addEventListener("beforeunload", () => store.maintenant());
   // Accès pour les tests de bout en bout
-  window.MF = { projet: () => projet, champs, calculs, vue, store, selectionner, saisir, ajouterObjet, action, lancerCalcul: () => $("bCalcul").click(), mode: () => mode };
+  window.MF = { projet: () => projet, modeCote, champs, calculs, vue, store, selectionner, saisir, ajouterObjet, action, lancerCalcul: () => $("bCalcul").click(), mode: () => mode };
 }
 
 function nomFichier(n) { return String(n || "projet").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9-_]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "projet"; }

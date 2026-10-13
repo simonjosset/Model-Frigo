@@ -36,7 +36,7 @@ export function reglagesDefaut() {
 
 export function evapDefaut(ch) {
   return { type: "simple", x: ch.longueur / 2, y: 0.5, dir: 90, len: 2.4, dep: 0.6, eh: 0.6, zb: null, nf: 3, dv: 0.5, q: 12000, T: 18, off: false, coude: false, coudeDescente: 0.15, coudeAvance: 0,
-    retombee: false, retombeeHaut: "auto", retombeeBas: null, retombeeDist: 0, retombeeLargeur: null, retombeeMurs: false };
+    retombee: false, retombeeHaut: "auto", retombeeBas: null, retombeeDist: 0, retombeeLargeur: null, retombeeMurs: false, retombeeDecal: 0 };
 }
 export function echellesDefaut(ch) {
   return {
@@ -46,7 +46,8 @@ export function echellesDefaut(ch) {
   };
 }
 export function cloisonDefaut(ch) {
-  return { x0: ch.longueur * 0.65, y0: 0, x1: ch.longueur * 0.65, y1: ch.largeur * 0.6, ep: 0.1, zb: 0, zh: null };
+  return { x0: ch.longueur * 0.65, y0: 0, x1: ch.longueur * 0.65, y1: ch.largeur * 0.6, ep: 0.1, zb: 0, zh: null,
+    porte: false, porteLargeur: 0.9, porteHauteur: 2, portePos: null, porteOuverte: true };
 }
 export function obstacleDefaut(ch) {
   return { x: ch.longueur * 0.25, y: ch.largeur * 0.7, dir: 0, L: 1.2, l: 0.8, h: 1.5, zb: 0, poreux: 0 };
@@ -66,7 +67,7 @@ export function projetExemple() {
   const p = {
     format: FORMAT, version: VERSION, nom: "Projet Alpha", maj: Date.now(),
     chambre: ch, reglages: reglagesDefaut(),
-    evaps: [], echelles: [], cloisons: [], obstacles: [], portes: [], deflecteurs: []
+    evaps: [], echelles: [], cloisons: [], obstacles: [], portes: [], deflecteurs: [], cotes: []
   };
   ajouter(p, "evaps", { x: 4.5, y: 5.8, dir: 270, q: 9000, T: 8, dv: 0.45 });
   const a = ajouter(p, "echelles", { x: 4.2, y: 3.1, n: 7, rangees: 2 });
@@ -131,7 +132,7 @@ export function normaliserObjet(liste, o, ch) {
     r.coude = !!r.coude; r.coudeDescente = n(r.coudeDescente, 0.15, 0, 5); r.coudeAvance = n(r.coudeAvance, 0, 0, 10);
     r.retombee = !!r.retombee; r.retombeeHaut = ["auto", "plafond", "appareil"].indexOf(r.retombeeHaut) >= 0 ? r.retombeeHaut : "auto";
     r.retombeeBas = nOuNull(r.retombeeBas, 0, 30); r.retombeeDist = n(r.retombeeDist, 0, -20, 20);
-    r.retombeeLargeur = nOuNull(r.retombeeLargeur, 0.2, 200); r.retombeeMurs = !!r.retombeeMurs;
+    r.retombeeLargeur = nOuNull(r.retombeeLargeur, 0.2, 200); r.retombeeMurs = !!r.retombeeMurs; r.retombeeDecal = n(r.retombeeDecal, 0, -100, 100);
   } else if (liste === "echelles") {
     r.x = n(r.x, d.x); r.y = n(r.y, d.y); r.dir = angle(r.dir);
     r.n = Math.round(n(r.n, d.n, 1, 60)); r.rangees = Math.round(n(r.rangees, d.rangees, 1, 20));
@@ -145,6 +146,9 @@ export function normaliserObjet(liste, o, ch) {
   } else if (liste === "cloisons") {
     r.x0 = n(r.x0, d.x0); r.y0 = n(r.y0, d.y0); r.x1 = n(r.x1, d.x1); r.y1 = n(r.y1, d.y1);
     r.ep = n(r.ep, 0.1, 0.02, 1); r.zb = n(r.zb, 0, 0, 20); r.zh = nOuNull(r.zh, 0.1, 20);
+    // Porte dans la cloison : largeur, hauteur, position de son milieu depuis le début de la cloison (vide = au milieu)
+    r.porte = !!r.porte; r.porteLargeur = n(r.porteLargeur, 0.9, 0.3, 20); r.porteHauteur = n(r.porteHauteur, 2, 0.3, 20);
+    r.portePos = nOuNull(r.portePos, 0, 200); r.porteOuverte = !(r.porteOuverte === false || r.porteOuverte === "false");
   } else if (liste === "obstacles") {
     r.x = n(r.x, d.x); r.y = n(r.y, d.y); r.dir = angle(r.dir);
     r.L = n(r.L, d.L, 0.05, 30); r.l = n(r.l, d.l, 0.05, 30); r.h = n(r.h, d.h, 0.05, 20); r.zb = n(r.zb, 0, 0, 20);
@@ -185,5 +189,15 @@ export function normaliser(p) {
   rg.tauxVise = n(rg.tauxVise, 40, 1, 500); rg.recalage = rg.recalage !== false;
   if (!MAILLES[rg.maille]) rg.maille = "normal";
   for (const l of LISTES) out[l] = (Array.isArray(p[l]) ? p[l] : []).filter(o => o && typeof o === "object").map(o => normaliserObjet(l, o, ch));
+  out.cotes = (Array.isArray(p.cotes) ? p.cotes : []).map(normaliserCote).filter(Boolean);
   return out;
+}
+
+/* Cote (mesure point à point) : deux points 3D ; une cote illisible est écartée */
+export function normaliserCote(c) {
+  if (!c || typeof c !== "object" || !Array.isArray(c.a) || !Array.isArray(c.b) || c.a.length !== 3 || c.b.length !== 3) return null;
+  const num = v => typeof v === "string" ? parseFloat(v.replace(",", ".")) : +v, a = c.a.map(num), b = c.b.map(num);
+  if (!a.concat(b).every(isFinite)) return null;
+  const r = v => Math.round(v * 1000) / 1000;
+  return { id: typeof c.id === "string" && c.id ? c.id.slice(0, 40) : uid("ct"), a: a.map(r), b: b.map(r) };
 }

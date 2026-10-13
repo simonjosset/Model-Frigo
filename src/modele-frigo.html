@@ -19,13 +19,13 @@
   --ink:#FFFFFF; --muted:#AEB9E1; --faint:#7E89AC;
   --accent:#CB3CFF; --accent2:#7F25FB; --cyan:#00C2FF; --green:#14CA74; --green-bg:rgba(5,193,104,.18);
   --red:#FF5A65; --red-bg:rgba(255,90,101,.18); --yellow:#FDB52A; --yellow-bg:rgba(253,181,42,.16);
-  --field:#081028; --view:#0B1739; --glass:rgba(11,23,57,.86);
+  --field:#081028; --view:#0B1739; --glass:rgba(11,23,57,.86); --cote:#FFD166;
   --font:"Mona Sans","Work Sans",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
   color-scheme:dark;
 }
 :root[data-theme="light"]{
   --bg:#F3F5FB; --side:#FFFFFF; --card:#FFFFFF; --card2:#F1F3FA; --line:#DDE2EF;
-  --ink:#0B1739; --muted:#4F5B80; --faint:#7E89AC; --field:#F7F8FC; --view:#EEF1F8; --glass:rgba(255,255,255,.9);
+  --ink:#0B1739; --muted:#4F5B80; --faint:#7E89AC; --field:#F7F8FC; --view:#EEF1F8; --glass:rgba(255,255,255,.9); --cote:#B3541E;
   color-scheme:light;
 }
 *,*::before,*::after{box-sizing:border-box}
@@ -90,6 +90,12 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .vue3d-etiquettes{position:absolute;inset:0;pointer-events:none;overflow:hidden}
 .etq{position:absolute;left:0;top:0;font-size:11.5px;font-weight:600;padding:2px 7px;border-radius:4px;background:var(--glass);border:1px solid var(--line);white-space:nowrap;color:var(--ink)}
 .etq.on{border-color:var(--accent);color:var(--accent)}
+.sans-noms .etq:not(.cote){display:none}
+.etq.cote{display:flex;align-items:center;gap:4px;color:var(--cote);border-color:var(--cote);font-variant-numeric:tabular-nums}
+.etq.cote button{display:none;pointer-events:auto;border:0;background:none;color:inherit;font-size:11px;padding:0 0 0 2px;cursor:pointer;line-height:1}
+.coter .etq.cote button{display:inline}
+.sonde .cote-l{font-size:18px;color:var(--cote);font-weight:700}
+.sonde .cote-a{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
 .ov{position:absolute;display:flex;gap:6px;align-items:center;z-index:2}
 .bar{background:var(--glass);border:1px solid var(--line);border-radius:8px;padding:4px;display:flex;gap:2px;align-items:center;flex-wrap:wrap;backdrop-filter:blur(6px)}
 .bar button{padding:6px 9px;color:var(--muted);font-weight:600;font-size:12.5px}
@@ -260,6 +266,7 @@ dialog::backdrop{background:rgba(3,8,22,.6)}
     <p class="msg3d" id="msg3d" hidden>La vue 3D n'est pas disponible : WebGL est désactivé dans ce navigateur.</p>
     <div class="ov ov-vues bar" role="toolbar" aria-label="Vues">
       <button type="button" data-vue="iso">3D</button><button type="button" data-vue="dessus">Dessus</button><button type="button" data-vue="face">Face</button><button type="button" data-vue="cote">Côté</button>
+      <span class="sep"></span><button type="button" id="bCote" aria-pressed="false" title="Prendre une cote point à point, accrochée aux coins des murs et des objets (M)">Cote</button>
     </div>
     <div class="ov ov-calques bar" role="toolbar" aria-label="Calques d'affichage">
       <button type="button" data-aff="particules" aria-pressed="true" title="Particules entraînées par l'air">Particules</button>
