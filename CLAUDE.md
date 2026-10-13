@@ -14,7 +14,7 @@ Outil web de modélisation 3D d'une chambre froide et des flux d'air de ses éva
   - `cfd.js` : Navier-Stokes incompressible isotherme sur grille décalée (semi-lagrangien, diffusion implicite, Forchheimer, projection par gradient conjugué) ; ventilateurs et aspirations en débits imposés sur les faces des caissons ; viscosité de jet réglée sur la portée (`REGLAGE.kPortee`) ;
   - `simulation.js` : déroulé par tranches (maillage, passes, recalage des portées par sécante) ;
   - `analyse.js` : indicateurs, portée mesurée, vitesses dans les échelles, alertes ;
-  - pièces voisines (`pieces`, `pieceGeo`, `collerPiece`, `murLibre`) : décor autour de la chambre, ignoré par le maillage, l'aperçu et l'analyse ; leurs modifications ne rendent pas le calcul fin périmé ;
+  - objets de décor (`DECOR` dans `modele.js`) : pièces voisines (`pieces`, `pieceGeo`, `collerPiece`, `murLibre`) autour de la chambre et personnes debout (`personnes`, `personneGeo`, repère d'échelle) ; ignorés par le maillage, l'aperçu et l'analyse, leurs modifications ne rendent pas le calcul fin périmé ;
   - `cotes.js` : points d'accroche des cotes (`pointsAccroche`) et mesure ; les cotes sont enregistrées dans le projet (`projet.cotes`, `normaliserCote`) ;
   - `champ.js` : échantillonnage, lignes de courant, échelle de couleurs ; `paquet.js` : transfert worker → page.
 - `src/vue3d/` : `vue.js` (scène Three.js en repère z vers le haut, murs masqués côté caméra, objets, sélection, déplacement, poignées des cloisons et des retombées, mode cote avec accroche, étiquettes), `flux.js` (particules, lignes, coupe, flèches, zones mortes, sonde).

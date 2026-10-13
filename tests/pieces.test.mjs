@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { normaliser, projetExemple, ajouter } from "../src/core/modele.js";
-import { collerPiece, murLibre, garderDedans, pieceGeo } from "../src/core/geometrie.js";
+import { collerPiece, murLibre, garderDedans, pieceGeo, personneGeo } from "../src/core/geometrie.js";
 import { construireGrille } from "../src/core/grille.js";
 import { pointsAccroche } from "../src/core/cotes.js";
 
@@ -41,4 +41,18 @@ test("pièce voisine : décor hors de la chambre, sans effet sur le maillage ; a
   assert.deepEqual(construireGrille(p, { h: 0.25 }).solide, sans, "maillage inchangé");
   assert.deepEqual(pieceGeo(o).box, { x0: 0, x1: 9, y0: -3, y1: 0, z0: 0, z1: 3.6 });
   assert.ok(pointsAccroche(p).some(q => q.nom === o.nom && q.p[0] === 0 && q.p[1] === -3 && q.p[2] === 0));
+});
+
+test("personne (repère d'échelle) : 1,75 m par défaut, gardée dans la chambre, hors maillage, accroche des cotes", () => {
+  const p = normaliser({ chambre: ch, evaps: [{ x: 4.5, y: 5.8, dir: 270 }] });
+  const sans = construireGrille(p, { h: 0.25 }).solide;
+  const o = ajouter(p, "personnes", { x: -3, y: 2, dir: 45 });
+  assert.equal(o.taille, 1.75); assert.equal(o.nom, "Personne 1"); assert.equal(o.dir, 90, "orientation au quart de tour");
+  garderDedans("personnes", o, p.chambre);
+  const b = personneGeo(o).box;
+  assert.ok(b.x0 >= -1e-9 && b.z1 === 1.75, JSON.stringify(b));
+  assert.deepEqual(construireGrille(p, { h: 0.25 }).solide, sans, "maillage inchangé");
+  assert.ok(pointsAccroche(p).some(q => /haut de la tête/.test(q.nom) && q.p[2] === 1.75));
+  assert.equal(normaliser({ chambre: ch, personnes: [{ taille: 5 }] }).personnes[0].taille, 2.3);
+  assert.deepEqual(normaliser({ chambre: ch }).personnes, []);
 });

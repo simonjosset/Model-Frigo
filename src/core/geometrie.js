@@ -249,7 +249,14 @@ export function boiteObjet(liste, o, ch) {
   if (liste === "evaps") return evapGeo(o, ch).box;
   if (liste === "echelles") return echellesGeo(o).box;
   if (liste === "obstacles") return obstacleGeo(o).box;
+  if (liste === "personnes") return personneGeo(o).box;
   return null;
+}
+
+/* ---------- Personne (repère d'échelle, décor) : 30 cm d'épaisseur, 50 cm d'épaules ---------- */
+export function personneGeo(o) {
+  const u = dirVec(o.dir), d = demi(u, 0.3 * o.taille / 1.75, 0.5 * o.taille / 1.75);
+  return { u, box: { x0: o.x - d.hx, x1: o.x + d.hx, y0: o.y - d.hy, y1: o.y + d.hy, z0: 0, z1: o.taille } };
 }
 
 /* ---------- Pièce voisine (décor) ---------- */

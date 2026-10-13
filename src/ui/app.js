@@ -1,5 +1,5 @@
 /* Modèle Frigo : contrôleur de l'interface (sélection, édition, annulation, calculs, résultats, projets). */
-import { normaliser, normaliserObjet, normaliserCote, ajouter, dupliquer, trouver, projetExemple, TYPES, LISTES } from "../core/modele.js";
+import { normaliser, normaliserObjet, normaliserCote, ajouter, dupliquer, trouver, projetExemple, TYPES, LISTES, DECOR } from "../core/modele.js";
 import { dims, volume, evapGeo, echellesGeo, garderDedans, collerPiece, murLibre } from "../core/geometrie.js";
 import { produitDuCatalogue } from "../core/produits.js";
 import { creerStore } from "./store.js";
@@ -10,8 +10,8 @@ import { mesure } from "../core/cotes.js";
 import { PALIERS, GRADUATIONS, VMAX_ECHELLE, positionEchelle } from "../core/champ.js";
 
 const $ = id => document.getElementById(id);
-const COULEURS = { evaps: "#3D7BFF", echelles: "#14CA74", cloisons: "#8F9BB6", obstacles: "#B07D45", portes: "#E07B39", deflecteurs: "#C9A23F", pieces: "#5B6B8C" };
-const ICONES = { evaps: "❄", echelles: "▤", cloisons: "▮", obstacles: "■", portes: "⌂", deflecteurs: "◜", pieces: "⬚" };
+const COULEURS = { evaps: "#3D7BFF", echelles: "#14CA74", cloisons: "#8F9BB6", obstacles: "#B07D45", portes: "#E07B39", deflecteurs: "#C9A23F", pieces: "#5B6B8C", personnes: "#FF8A2A" };
+const ICONES = { evaps: "❄", echelles: "▤", cloisons: "▮", obstacles: "■", portes: "⌂", deflecteurs: "◜", pieces: "⬚", personnes: "☺" };
 const AFF0 = { particules: true, lignes: false, coupe: false, vecteurs: false, mortes: false, couleurProduits: false, murs: true, plafond: false, etiquettes: true, pieces: true, axe: "z", pos: null, densite: 2500, vitesseAnim: 1 };
 
 export function demarrer() {
@@ -40,7 +40,7 @@ export function demarrer() {
       vue = creerVue($("vue3d"), {
         onPick: (id, produit) => { selectionner(id || "chambre"); if (produit) choisirProduit(id, produit.chariot, produit.niveau); },
         onDrag: (id, v) => deplacer(id, v),
-        onDragFin: () => { glisse = false; const t = trouver(projet, sel); if (!t || t.liste !== "pieces") demanderApercu(true); rendreProp(); },
+        onDragFin: () => { glisse = false; const t = trouver(projet, sel); if (!t || DECOR.indexOf(t.liste) < 0) demanderApercu(true); rendreProp(); },
         onSonde: s => afficherSonde(s),
         onCote: (a, b) => { memoriser(); const c = normaliserCote({ a, b }); projet.cotes.push(c); derniereCote = mesure(c.a, c.b); majCotes(); },
         onCoteSuppr: id => { memoriser(); projet.cotes = projet.cotes.filter(c => c.id !== id); majCotes(); },
@@ -142,7 +142,7 @@ export function demarrer() {
     if (!glisse) { memoriser(); glisse = true; }
     Object.assign(t.objet, v);
     garderDedans(t.liste, t.objet, projet.chambre);
-    apresModif({ objet: t, sansPanneau: true, decor: t.liste === "pieces" });
+    apresModif({ objet: t, sansPanneau: true, decor: DECOR.indexOf(t.liste) >= 0 });
   }
 
   function ajouterObjet(liste) {
@@ -159,7 +159,7 @@ export function demarrer() {
     }
     const o = ajouter(projet, liste, v);
     garderDedans(liste, o, projet.chambre);
-    apresModif({ decor: liste === "pieces" });
+    apresModif({ decor: DECOR.indexOf(liste) >= 0 });
     selectionner(o.id);
   }
 
@@ -174,7 +174,7 @@ export function demarrer() {
     else if (nom.startsWith("coller-") && t.liste === "pieces") Object.assign(t.objet, collerPiece(t.objet, projet.chambre, nom.slice(7)));
     else if (nom === "pivoter" && t.liste === "cloisons") { const o = t.objet, cx = (o.x0 + o.x1) / 2, cy = (o.y0 + o.y1) / 2; [o.x0, o.y0, o.x1, o.y1] = [cx - (o.y0 - cy), cy + (o.x0 - cx), cx - (o.y1 - cy), cy + (o.x1 - cx)]; garderDedans("cloisons", o, projet.chambre); }
     if (t.objet && nom === "pivoter") garderDedans(t.liste, t.objet, projet.chambre);
-    apresModif({ decor: t.liste === "pieces" });
+    apresModif({ decor: DECOR.indexOf(t.liste) >= 0 });
     if (vue) vue.selection(sel === "chambre" ? null : sel);
   }
 
@@ -210,7 +210,7 @@ export function demarrer() {
       const n = normaliserObjet(t.liste, o, projet.chambre);
       Object.keys(o).forEach(k => delete o[k]); Object.assign(o, n);
       garderDedans(t.liste, o, projet.chambre);
-      if (t.liste === "pieces") { apresModif({ decor: true }); return; }
+      if (DECOR.indexOf(t.liste) >= 0) { apresModif({ decor: true }); return; }
     }
     apresModif();
   }
@@ -224,7 +224,8 @@ export function demarrer() {
     let h = "";
     LISTES.forEach(l => {
       h += '<div class="grp"><div class="grp-h"><h3>' + TYPES[l].plusieurs + '</h3><button type="button" data-ajout="' + l + '" title="Ajouter : ' + TYPES[l].seul.toLowerCase() + '">+ Ajouter</button></div>';
-      if (!projet[l].length) h += '<div class="vide">Aucun' + (l === "echelles" || l === "cloisons" || l === "portes" || l === "pieces" ? "e" : "") + " " + TYPES[l].seul.toLowerCase().replace("groupe d'échelles", "échelle") + "</div>";
+      if (l === "pieces" && projet[l].length) h += '<label class="chk grp-chk"><input type="checkbox" data-affchk="pieces"' + (aff.pieces ? " checked" : "") + "> Afficher les pièces voisines</label>";
+      if (!projet[l].length) h += '<div class="vide">Aucun' + (l === "echelles" || l === "cloisons" || l === "portes" || l === "pieces" || l === "personnes" ? "e" : "") + " " + TYPES[l].seul.toLowerCase().replace("groupe d'échelles", "échelle") + "</div>";
       projet[l].forEach(o => {
         h += '<button type="button" class="it' + (o.off ? " off" : "") + '" data-sel="' + o.id + '" aria-current="' + (sel === o.id) + '"><span class="ic" style="background:' + COULEURS[l] + '">' + ICONES[l] + '</span><span class="nm">' + esc(o.nom) + "<small>" + esc(resumeObjet(l, o)) + "</small></span>" +
           (l === "evaps" ? '<span class="eye" role="button" tabindex="0" data-oeil="' + o.id + '" title="' + (o.off ? "Réafficher" : "Simuler sans cet appareil") + '">' + (o.off ? "◌" : "◉") + "</span>" : "") + "</button>";
@@ -315,6 +316,7 @@ export function demarrer() {
   }
   function majAffichage() {
     document.querySelectorAll("[data-aff]").forEach(b => b.setAttribute("aria-pressed", !!aff[b.dataset.aff]));
+    document.querySelectorAll("[data-affchk]").forEach(c => { c.checked = !!aff[c.dataset.affchk]; });
     document.querySelectorAll("[data-axe]").forEach(b => b.setAttribute("aria-pressed", b.dataset.axe === aff.axe));
     $("coupeBar").hidden = !aff.coupe;
     majCoupeBornes();
@@ -397,7 +399,9 @@ export function demarrer() {
     else if (t.dataset.tab) choisirOnglet(t.dataset.tab);
   });
   document.addEventListener("change", ev => {
-    const t = ev.target; if (!t.dataset || !t.dataset.k) return;
+    const t = ev.target;
+    if (t.dataset && t.dataset.affchk) { aff[t.dataset.affchk] = t.checked; majAffichage(); return; }
+    if (!t.dataset || !t.dataset.k) return;
     const type = t.dataset.type || "num";
     saisir(t.dataset.k, type === "chk" ? t.checked : t.value, type, +t.dataset.f || 1, !!t.dataset.vide);
   });

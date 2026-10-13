@@ -18,9 +18,12 @@ export const TYPES = {
   obstacles: { seul: "Obstacle", plusieurs: "Obstacles", prefixe: "Obstacle " },
   portes: { seul: "Porte", plusieurs: "Portes", prefixe: "Porte " },
   deflecteurs: { seul: "Déflecteur d'angle", plusieurs: "Déflecteurs d'angle", prefixe: "Déflecteur " },
-  pieces: { seul: "Pièce voisine", plusieurs: "Pièces voisines", prefixe: "Pièce " }
+  pieces: { seul: "Pièce voisine", plusieurs: "Pièces voisines", prefixe: "Pièce " },
+  personnes: { seul: "Personne", plusieurs: "Personnes", prefixe: "Personne " }
 };
-export const LISTES = ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces"];
+export const LISTES = ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces", "personnes"];
+/* Objets de décor : hors maillage, aperçu et analyse */
+export const DECOR = ["pieces", "personnes"];
 
 export const MAILLES = {
   rapide: { nom: "Rapide", cellules: 40000 },
@@ -65,7 +68,11 @@ export function deflecteurDefaut(ch) {
 export function pieceDefaut(ch) {
   return { x: ch.longueur / 2, y: -1.5, L: ch.longueur, l: 3, H: ch.H, T: 5 };
 }
-const DEFAUTS = { evaps: evapDefaut, echelles: echellesDefaut, cloisons: cloisonDefaut, obstacles: obstacleDefaut, portes: porteDefaut, deflecteurs: deflecteurDefaut, pieces: pieceDefaut };
+/* Personne debout (repère d'échelle) : position, sens du regard (dir), taille */
+export function personneDefaut(ch) {
+  return { x: Math.min(1.5, ch.longueur / 2), y: Math.min(1.2, ch.largeur / 2), dir: 90, taille: 1.75 };
+}
+const DEFAUTS = { evaps: evapDefaut, echelles: echellesDefaut, cloisons: cloisonDefaut, obstacles: obstacleDefaut, portes: porteDefaut, deflecteurs: deflecteurDefaut, pieces: pieceDefaut, personnes: personneDefaut };
 
 /* Projet d'exemple : chambre de stockage de glaces (nom de code uniquement) */
 export function projetExemple() {
@@ -73,7 +80,7 @@ export function projetExemple() {
   const p = {
     format: FORMAT, version: VERSION, nom: "Projet Alpha", maj: Date.now(),
     chambre: ch, reglages: reglagesDefaut(),
-    evaps: [], echelles: [], cloisons: [], obstacles: [], portes: [], deflecteurs: [], pieces: [], cotes: []
+    evaps: [], echelles: [], cloisons: [], obstacles: [], portes: [], deflecteurs: [], pieces: [], personnes: [], cotes: []
   };
   ajouter(p, "evaps", { x: 4.5, y: 5.8, dir: 270, q: 9000, T: 8, dv: 0.45 });
   const a = ajouter(p, "echelles", { x: 4.2, y: 3.1, n: 7, rangees: 2 });
@@ -168,6 +175,8 @@ export function normaliserObjet(liste, o, ch) {
   } else if (liste === "pieces") {
     r.x = n(r.x, d.x, -500, 500); r.y = n(r.y, d.y, -500, 500); r.L = n(r.L, d.L, 0.5, 300); r.l = n(r.l, d.l, 0.5, 300);
     r.H = n(r.H, d.H, 1, 30); r.T = n(r.T, d.T, -60, 60);
+  } else if (liste === "personnes") {
+    r.x = n(r.x, d.x); r.y = n(r.y, d.y); r.dir = angle(r.dir); r.taille = n(r.taille, 1.75, 0.5, 2.3);
   }
   return r;
 }

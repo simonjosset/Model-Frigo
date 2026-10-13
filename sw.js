@@ -3,7 +3,7 @@
    version s'affiche dès l'ouverture. Sans réseau (ou réseau trop lent), on prend la copie en
    cache. Les autres fichiers (icônes, manifeste) viennent du cache et se mettent à jour en
    arrière-plan. Changer VERSION force le renouvellement complet du cache. */
-var VERSION = "modele-frigo-v0.11.0";
+var VERSION = "modele-frigo-v0.12.0";
 var SHELL = [
   "./",
   "./modele-frigo.html",

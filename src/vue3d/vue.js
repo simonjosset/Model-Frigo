@@ -2,7 +2,7 @@
    vues prédéfinies, image PNG. Repère du projet conservé : x, y au sol, z vers le haut. */
 import {
   Scene, PerspectiveCamera, WebGLRenderer, HemisphereLight, DirectionalLight, AmbientLight, Raycaster, Vector2, Vector3, Color, Group, Mesh,
-  BoxGeometry, CircleGeometry, RingGeometry, CylinderGeometry, ConeGeometry, SphereGeometry, ShapeGeometry, Shape, BufferGeometry, Float32BufferAttribute,
+  BoxGeometry, CapsuleGeometry, CircleGeometry, RingGeometry, CylinderGeometry, ConeGeometry, SphereGeometry, ShapeGeometry, Shape, BufferGeometry, Float32BufferAttribute,
   MeshLambertMaterial, MeshBasicMaterial, LineBasicMaterial, LineSegments, InstancedMesh, Object3D, Plane, DoubleSide, MOUSE, TOUCH, EdgesGeometry, Box3, TubeGeometry, QuadraticBezierCurve3
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -107,6 +107,9 @@ export function creerVue(conteneur, cb) {
     M.poignee = new MeshBasicMaterial({ color: theme.accent });
     M.pieceMur = new MeshLambertMaterial({ color: s ? 0x8fa3d1 : 0x9aa8c8, transparent: true, opacity: s ? 0.06 : 0.1, side: DoubleSide, depthWrite: false });
     M.pieceTrait = new LineBasicMaterial({ color: s ? 0x6f86c0 : 0x7f8db0, transparent: true, opacity: 0.55 });
+    M.gilet = new MeshLambertMaterial({ color: 0xff8a2a });
+    M.pantalon = new MeshLambertMaterial({ color: 0x34405e });
+    M.peau = new MeshLambertMaterial({ color: 0xe8c2a0 });
     M.poigneeDessus = new MeshBasicMaterial({ color: theme.accent, depthTest: false, transparent: true }); // visible même derrière l'appareil
     // Cotes : dessinées par-dessus les objets
     M.cote = new LineBasicMaterial({ color: s ? 0xffd166 : 0xb3541e, depthTest: false, transparent: true });
@@ -358,7 +361,20 @@ export function creerVue(conteneur, cb) {
     g.visible = aff.pieces;
     return g;
   }
-  const CONSTR = { evaps: construireEvap, echelles: construireEchelles, cloisons: construireCloison, obstacles: construireObstacle, portes: construirePorte, deflecteurs: construireDeflecteur, pieces: construirePiece };
+  /* Personne debout (repère d'échelle) : silhouette simple, proportions d'un adulte, regard suivant dir */
+  function construirePersonne(o) {
+    const g = new Group(), h = new Group(), k = o.taille / 1.75;
+    const capsule = (r, L, mat, x, y, z, sx) => { const m = new Mesh(new CapsuleGeometry(r, L, 4, 10), mat); m.rotation.x = Math.PI / 2; m.position.set(x, y, z); if (sx) m.scale.x = sx; h.add(m); };
+    [-0.1, 0.1].forEach(y => capsule(0.07, 0.72, M.pantalon, 0, y, 0.43));          // jambes
+    capsule(0.17, 0.36, M.gilet, 0, 0, 1.16, 0.62);                                  // buste
+    [-0.235, 0.235].forEach(y => capsule(0.05, 0.5, M.gilet, 0, y, 1.13));           // bras
+    const tete = new Mesh(new SphereGeometry(0.105, 16, 12), M.peau); tete.position.set(0.01, 0, 1.635); h.add(tete);
+    const nez = new Mesh(new SphereGeometry(0.025, 8, 6), M.peau); nez.position.set(0.105, 0, 1.63); h.add(nez); // indique le regard
+    h.scale.setScalar(k); h.rotation.z = o.dir * Math.PI / 180; h.position.set(o.x, o.y, 0);
+    g.add(h);
+    return g;
+  }
+  const CONSTR = { evaps: construireEvap, echelles: construireEchelles, cloisons: construireCloison, obstacles: construireObstacle, portes: construirePorte, deflecteurs: construireDeflecteur, pieces: construirePiece, personnes: construirePersonne };
 
   function construireObjet(liste, o) {
     if (objets[o.id]) vider(objets[o.id]);
@@ -407,6 +423,7 @@ export function creerVue(conteneur, cb) {
     const ajoute = (id, txt, pos, cls) => { const d = document.createElement("div"); d.className = "etq " + (cls || ""); d.textContent = txt; calque.appendChild(d); etiq.push({ id, d, pos: new Vector3(pos[0], pos[1], pos[2]) }); };
     projet.evaps.forEach(e => { const z = evapGeo(e, projet.chambre).z; ajoute(e.id, e.nom, [e.x, e.y, z.zt + 0.25], "ev"); });
     projet.echelles.forEach(e => { const g = echellesGeo(e); ajoute(e.id, e.nom + " · " + g.total + " éch.", [e.x, e.y, g.info.H + 0.25], "ec"); });
+    (projet.personnes || []).forEach(o => ajoute(o.id, o.nom + " · " + fr(o.taille, 2) + " m", [o.x, o.y, o.taille + 0.22], "pe"));
     (projet.pieces || []).forEach(o => { ajoute(o.id, o.nom + " · " + (o.T > 0 ? "+" : "") + fr(o.T, 0) + " °C", [o.x, o.y, 0.15], "pc"); etiq[etiq.length - 1].piece = true; });
   }
   const pv = new Vector3();
@@ -529,7 +546,7 @@ export function creerVue(conteneur, cb) {
     cb.onPick && cb.onPick(null);
   });
   function objetProjet(id) {
-    for (const l of ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces"]) { const o = (projet[l] || []).find(x => x.id === id); if (o) return o; }
+    for (const l of ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces", "personnes"]) { const o = (projet[l] || []).find(x => x.id === id); if (o) return o; }
     return null;
   }
 
@@ -637,7 +654,7 @@ export function creerVue(conteneur, cb) {
       projet = p;
       Object.values(objets).forEach(vider); objets = {};
       construireChambre();
-      ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces"].forEach(l => (p[l] || []).forEach(o => construireObjet(l, o)));
+      ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces", "personnes"].forEach(l => (p[l] || []).forEach(o => construireObjet(l, o)));
       majPickables(); construireEtiquettes(); construireCotes(); majSelection(); colorerProduits();
       taille();
       if (premier || !garder) vue("iso", true);
