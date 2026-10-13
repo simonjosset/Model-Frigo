@@ -9,6 +9,7 @@ Modélisation 3D d'une chambre froide, de ses évaporateurs et des flux d'air pr
 - **Échelles** (chariots à glissières) chargées de produits : hauteur, largeur, profondeur, nombre d'étages, produit (pot de glace 3,3 kg, bacs gastronormes, plaques, cartons ou produit personnalisé), produits par étage et étages chargés, rangées d'échelles avec écart et allée. Chaque produit est dessiné dans la 3D ; nombre de produits et masse calculés.
 - **Déflecteurs d'angle** : arrondi en quart de cercle dans l'angle plafond / mur (ou sol / mur), rayon et longueur réglables, accroché au mur le plus proche, pour que le jet tourne sans buter dans l'angle.
 - **Cloisons** pleine hauteur ou partielles (l'air passe dessus ou dessous), avec une **porte** éventuelle (largeur, hauteur, position ; ouverte, l'air la traverse, fermée, elle compte comme la cloison), **obstacles** pleins ou ajourés.
+- **Pièces voisines** (décor, hors calcul) : sas, quai, couloir, autre chambre… dessinées autour de la chambre avec leur nom et leur température (sol teinté), collées d'un clic contre un mur, masquables par le calque « Pièces ».
 - **Cotes** : mesure point à point dans la 3D, accrochée aux coins de la chambre, milieux des murs, sommets des objets, bouts des retombées et portes (Maj : point libre) ; longueur et écarts Δx, Δy, Δz, cotes enregistrées dans le projet et écrites sur l'image PNG.
 - **Flux d'air** :
   - *Aperçu* instantané, recalculé à chaque modification : modèle de jets empirique (jet collé au plafond, arrivée sur la paroi d'en face, retour d'air au sol) ;

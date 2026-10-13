@@ -6,7 +6,7 @@ import {
   MeshLambertMaterial, MeshBasicMaterial, LineBasicMaterial, LineSegments, InstancedMesh, Object3D, Plane, DoubleSide, MOUSE, TOUCH, EdgesGeometry, Box3, TubeGeometry, QuadraticBezierCurve3
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { dims, polygone, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo, etirerRetombee, porteCloison } from "../core/geometrie.js";
+import { dims, polygone, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo, etirerRetombee, porteCloison, pieceGeo } from "../core/geometrie.js";
 import { pointsAccroche, mesure } from "../core/cotes.js";
 import { produitsLocaux, ROUES } from "../core/produits.js";
 import { creerFlux } from "./flux.js";
@@ -45,7 +45,7 @@ export function creerVue(conteneur, cb) {
   let projet = null, theme = { fond: 0x0b1739, accent: 0xcb3cff, sombre: true }, selId = null;
   const racine = new Group(); scene.add(racine);
   let murs = [], plafond = null, objets = {}, pickables = [], selBox = null, poignees = [];
-  const aff = { murs: true, plafond: false, etiquettes: true, couleurProduits: false };
+  const aff = { murs: true, plafond: false, etiquettes: true, couleurProduits: false, pieces: true };
   const flux = creerFlux(scene, { demander: () => demander() });
   let vitEchelles = null; // vitesses par chariot (analyse) pour colorer les produits
 
@@ -105,6 +105,8 @@ export function creerVue(conteneur, cb) {
     M.porte = new MeshLambertMaterial({ color: 0xe07b39, side: DoubleSide, transparent: true, opacity: 0.85 });
     M.sel = new LineBasicMaterial({ color: theme.accent });
     M.poignee = new MeshBasicMaterial({ color: theme.accent });
+    M.pieceMur = new MeshLambertMaterial({ color: s ? 0x8fa3d1 : 0x9aa8c8, transparent: true, opacity: s ? 0.06 : 0.1, side: DoubleSide, depthWrite: false });
+    M.pieceTrait = new LineBasicMaterial({ color: s ? 0x6f86c0 : 0x7f8db0, transparent: true, opacity: 0.55 });
     M.poigneeDessus = new MeshBasicMaterial({ color: theme.accent, depthTest: false, transparent: true }); // visible même derrière l'appareil
     // Cotes : dessinées par-dessus les objets
     M.cote = new LineBasicMaterial({ color: s ? 0xffd166 : 0xb3541e, depthTest: false, transparent: true });
@@ -341,7 +343,22 @@ export function creerVue(conteneur, cb) {
     const bg = new BufferGeometry(); bg.setAttribute("position", new Float32BufferAttribute(bords, 3)); g.add(new LineSegments(bg, M.trait));
     return g;
   }
-  const CONSTR = { evaps: construireEvap, echelles: construireEchelles, cloisons: construireCloison, obstacles: construireObstacle, portes: construirePorte, deflecteurs: construireDeflecteur };
+  /* Pièce voisine (décor) : sol teinté selon la température, murs à peine visibles, arêtes */
+  function couleurTemperature(T) { return T <= -15 ? 0x3d7bff : T <= 0 ? 0x5fb4ff : T <= 8 ? 0x2fbfb8 : T <= 18 ? 0x8f9bb6 : 0xe0a050; }
+  function construirePiece(o) {
+    const g = new Group(), b = pieceGeo(o).box, L = b.x1 - b.x0, l = b.y1 - b.y0, H = b.z1;
+    const sol = new Mesh(new BoxGeometry(L, l, 0.02), new MeshLambertMaterial({ color: couleurTemperature(o.T), transparent: true, opacity: 0.38, depthWrite: false }));
+    sol.position.set(o.x, o.y, -0.012); g.add(sol);
+    [[b.x0, b.y0, b.x1, b.y0], [b.x1, b.y0, b.x1, b.y1], [b.x1, b.y1, b.x0, b.y1], [b.x0, b.y1, b.x0, b.y0]].forEach(([x0, y0, x1, y1]) => {
+      const geo = new BufferGeometry();
+      geo.setAttribute("position", new Float32BufferAttribute([x0, y0, 0, x1, y1, 0, x1, y1, H, x0, y0, 0, x1, y1, H, x0, y0, H], 3)); geo.computeVertexNormals();
+      const m = new Mesh(geo, M.pieceMur); m.userData.decor = true; g.add(m);
+    });
+    const ar = new LineSegments(new EdgesGeometry(new BoxGeometry(L, l, H)), M.pieceTrait); ar.position.set(o.x, o.y, H / 2); g.add(ar);
+    g.visible = aff.pieces;
+    return g;
+  }
+  const CONSTR = { evaps: construireEvap, echelles: construireEchelles, cloisons: construireCloison, obstacles: construireObstacle, portes: construirePorte, deflecteurs: construireDeflecteur, pieces: construirePiece };
 
   function construireObjet(liste, o) {
     if (objets[o.id]) vider(objets[o.id]);
@@ -350,7 +367,7 @@ export function creerVue(conteneur, cb) {
     racine.add(g); objets[o.id] = g;
     return g;
   }
-  function majPickables() { pickables = Object.values(objets); }
+  function majPickables() { pickables = Object.values(objets).filter(o => o.visible); }
 
   /* ---------- Sélection ---------- */
   function majSelection() {
@@ -390,6 +407,7 @@ export function creerVue(conteneur, cb) {
     const ajoute = (id, txt, pos, cls) => { const d = document.createElement("div"); d.className = "etq " + (cls || ""); d.textContent = txt; calque.appendChild(d); etiq.push({ id, d, pos: new Vector3(pos[0], pos[1], pos[2]) }); };
     projet.evaps.forEach(e => { const z = evapGeo(e, projet.chambre).z; ajoute(e.id, e.nom, [e.x, e.y, z.zt + 0.25], "ev"); });
     projet.echelles.forEach(e => { const g = echellesGeo(e); ajoute(e.id, e.nom + " · " + g.total + " éch.", [e.x, e.y, g.info.H + 0.25], "ec"); });
+    (projet.pieces || []).forEach(o => { ajoute(o.id, o.nom + " · " + (o.T > 0 ? "+" : "") + fr(o.T, 0) + " °C", [o.x, o.y, 0.15], "pc"); etiq[etiq.length - 1].piece = true; });
   }
   const pv = new Vector3();
   function majEtiquettes() {
@@ -397,7 +415,7 @@ export function creerVue(conteneur, cb) {
     const w = el.clientWidth, h = el.clientHeight;
     if (aff.etiquettes) etiq.forEach(t => {
       pv.copy(t.pos).project(camera);
-      const vis = pv.z < 1 && Math.abs(pv.x) < 1.1 && Math.abs(pv.y) < 1.1;
+      const vis = (!t.piece || aff.pieces) && pv.z < 1 && Math.abs(pv.x) < 1.1 && Math.abs(pv.y) < 1.1;
       t.d.style.display = vis ? "" : "none";
       if (vis) t.d.style.transform = "translate(" + ((pv.x + 1) / 2 * w).toFixed(1) + "px," + ((1 - pv.y) / 2 * h).toFixed(1) + "px) translate(-50%,-100%)";
       t.d.classList.toggle("on", t.id === selId);
@@ -415,9 +433,12 @@ export function creerVue(conteneur, cb) {
   let anim = null;
   function vue(nom, immediat) {
     if (!projet) return;
-    const k = dims(projet.chambre), ctr = new Vector3(k.W / 2, k.B / 2, k.H * 0.35);
+    const k = dims(projet.chambre), bb = { x0: 0, x1: k.W, y0: 0, y1: k.B, H: k.H };
+    // Cadrage : la chambre et les pièces voisines affichées
+    if (aff.pieces) (projet.pieces || []).forEach(o => { const b = pieceGeo(o).box; bb.x0 = Math.min(bb.x0, b.x0); bb.x1 = Math.max(bb.x1, b.x1); bb.y0 = Math.min(bb.y0, b.y0); bb.y1 = Math.max(bb.y1, b.y1); bb.H = Math.max(bb.H, b.z1); });
+    const ctr = new Vector3((bb.x0 + bb.x1) / 2, (bb.y0 + bb.y1) / 2, bb.H * 0.35);
     const d = new Vector3().fromArray(VUES[nom] || VUES.iso).normalize();
-    const R = Math.hypot(k.W, k.B, k.H) / 2, dist = R / Math.sin(camera.fov * Math.PI / 360) * (camera.aspect < 1 ? 1.6 : 1.05);
+    const R = Math.hypot(bb.x1 - bb.x0, bb.y1 - bb.y0, bb.H) / 2, dist = R / Math.sin(camera.fov * Math.PI / 360) * (camera.aspect < 1 ? 1.6 : 1.05);
     const to = ctr.clone().add(d.multiplyScalar(dist));
     if (anim) cancelAnimationFrame(anim);
     if (immediat) { camera.position.copy(to); controls.target.copy(ctr); controls.update(); demander(); return; }
@@ -443,6 +464,7 @@ export function creerVue(conteneur, cb) {
     if (poignees.length) { const hp = ray.intersectObjects(poignees, false); if (hp.length) return { poignee: hp[0].object.userData.poignee }; }
     const hits = ray.intersectObjects(pickables, true);
     for (const h of hits) {
+      if (h.object.userData && h.object.userData.decor) continue; // murs des pièces voisines : on vise à travers
       let o = h.object; const mP = o.userData && o.userData.produits ? o : null;
       while (o && !(o.userData && o.userData.id)) o = o.parent;
       if (!o) continue;
@@ -507,7 +529,7 @@ export function creerVue(conteneur, cb) {
     cb.onPick && cb.onPick(null);
   });
   function objetProjet(id) {
-    for (const l of ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs"]) { const o = projet[l].find(x => x.id === id); if (o) return o; }
+    for (const l of ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces"]) { const o = (projet[l] || []).find(x => x.id === id); if (o) return o; }
     return null;
   }
 
@@ -546,7 +568,7 @@ export function creerVue(conteneur, cb) {
   function pointVise(ev, libre) {
     viser(ev);
     if (!libre) {
-      if (!accroches) accroches = pointsAccroche(projet);
+      if (!accroches) accroches = pointsAccroche(aff.pieces ? projet : Object.assign({}, projet, { pieces: [] }));
       const r = el.getBoundingClientRect(), w = r.width, h = r.height, mx = ev.clientX - r.left, my = ev.clientY - r.top;
       const rayon = ev.pointerType === "mouse" ? RAYON_ACCROCHE : RAYON_ACCROCHE * 1.8;
       let best = null, dmin = rayon;
@@ -615,7 +637,7 @@ export function creerVue(conteneur, cb) {
       projet = p;
       Object.values(objets).forEach(vider); objets = {};
       construireChambre();
-      ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs"].forEach(l => p[l].forEach(o => construireObjet(l, o)));
+      ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces"].forEach(l => (p[l] || []).forEach(o => construireObjet(l, o)));
       majPickables(); construireEtiquettes(); construireCotes(); majSelection(); colorerProduits();
       taille();
       if (premier || !garder) vue("iso", true);
@@ -637,6 +659,7 @@ export function creerVue(conteneur, cb) {
       Object.assign(aff, o);
       flux.setAffichage(o);
       if (plafond) plafond.visible = aff.plafond;
+      if ("pieces" in o) { Object.values(objets).forEach(g => { if (g.userData.liste === "pieces") g.visible = aff.pieces; }); majPickables(); accroches = null; }
       if ("couleurProduits" in o) colorerProduits();
       animer(flux.anime());
       demander();

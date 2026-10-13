@@ -1,6 +1,6 @@
 /* Panneaux de propriétés : HTML des formulaires (chambre, objets, réglages) et lecture des saisies. */
 import { CATALOGUE } from "../core/produits.js";
-import { dims, surface, volume, evapGeo, echellesGeo, cloisonGeo, porteCloison, polygone, COINS, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "../core/geometrie.js";
+import { dims, surface, volume, evapGeo, echellesGeo, cloisonGeo, porteCloison, MURS_PIECE, polygone, COINS, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "../core/geometrie.js";
 import { MAILLES } from "../core/modele.js";
 import { couleur } from "../core/champ.js";
 
@@ -214,6 +214,17 @@ function panneauObstacle(p, o) {
   return h;
 }
 
+/* Pièce voisine : décor autour de la chambre (hors calcul) */
+function panneauPiece(p, o) {
+  let h = titre(o, "Pièce voisine · décor, hors calcul");
+  h += '<div class="sec"><h4>Pièce</h4><div class="grid">' + num(o, "L", "Longueur (gauche ↔ droite)", "m") + num(o, "l", "Largeur (avant ↔ fond)", "m") +
+    num(o, "H", "Hauteur", "m") + num(o, "T", "Température", "°C", { dec: 0 }) + num(o, "x", "Centre x", "m") + num(o, "y", "Centre y", "m") + "</div></div>";
+  h += '<div class="sec"><h4>Coller contre un mur de la chambre</h4><div class="coins" role="group" aria-label="Coller contre un mur">' +
+    Object.keys(MURS_PIECE).map(m => '<button type="button" data-act="coller-' + m + '">' + MURS_PIECE[m] + "</button>").join("") + "</div>";
+  h += '<p class="hint">La pièce prend toute la longueur du mur ; son petit côté devient sa profondeur. Faites-la glisser pour la déplacer, R pour la tourner d\'un quart de tour. Elle situe la chambre dans le bâtiment (sas, quai, couloir, autre chambre…) et n\'entre pas dans le calcul des flux d\'air. Le calque « Pièces » la masque.</p></div>';
+  return h + actions("pieces", o);
+}
+
 function panneauPorte(p, d) {
   let h = titre(d, "Porte");
   h += '<div class="sec"><h4>Porte</h4><div class="grid">' + num(d, "w", "Largeur", "m") + num(d, "h", "Hauteur", "m") + num(d, "x", "Position x", "m") + num(d, "y", "Position y", "m") + "</div>";
@@ -265,6 +276,7 @@ export function panneauObjet(p, liste, o, R, opts) {
   if (liste === "evaps") return panneauEvap(p, o, R);
   if (liste === "echelles") return panneauEchelles(p, o, R, opts);
   if (liste === "cloisons") return panneauCloison(p, o);
+  if (liste === "pieces") return panneauPiece(p, o);
   if (liste === "obstacles") return panneauObstacle(p, o);
   return panneauPorte(p, o);
 }
@@ -291,6 +303,7 @@ export function resumeObjet(liste, o) {
   if (liste === "echelles") { const g = echellesGeo(o); return g.total + " éch. · " + fr(g.total * g.info.nb, 0) + " produits"; }
   if (liste === "cloisons") { return "L " + fr(Math.hypot(o.x1 - o.x0, o.y1 - o.y0), 2) + " m" + (o.zh != null || o.zb > 0 ? " · partielle" : "") + (o.porte ? " · porte" + (o.porteOuverte ? " ouverte" : " fermée") : ""); }
   if (liste === "obstacles") return fr(o.L, 2) + " × " + fr(o.l, 2) + " × " + fr(o.h, 2) + " m" + (o.poreux > 0.01 ? " · ajouré" : "");
+  if (liste === "pieces") return fr(o.L, 2) + " × " + fr(o.l, 2) + " m · " + (o.T > 0 ? "+" : "") + fr(o.T, 0) + " °C";
   if (liste === "deflecteurs") return "R " + fr(o.rayon, 2) + " m · L " + fr(o.longueur, 2) + " m · " + (o.angle === "sol" ? "sol" : "plafond");
   return fr(o.w, 2) + " × " + fr(o.h, 2) + " m";
 }

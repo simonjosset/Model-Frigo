@@ -1,6 +1,6 @@
 /* Modèle Frigo : contrôleur de l'interface (sélection, édition, annulation, calculs, résultats, projets). */
 import { normaliser, normaliserObjet, normaliserCote, ajouter, dupliquer, trouver, projetExemple, TYPES, LISTES } from "../core/modele.js";
-import { dims, volume, evapGeo, echellesGeo, garderDedans } from "../core/geometrie.js";
+import { dims, volume, evapGeo, echellesGeo, garderDedans, collerPiece, murLibre } from "../core/geometrie.js";
 import { produitDuCatalogue } from "../core/produits.js";
 import { creerStore } from "./store.js";
 import { creerCalculs } from "./calculs.js";
@@ -10,9 +10,9 @@ import { mesure } from "../core/cotes.js";
 import { PALIERS, GRADUATIONS, VMAX_ECHELLE, positionEchelle } from "../core/champ.js";
 
 const $ = id => document.getElementById(id);
-const COULEURS = { evaps: "#3D7BFF", echelles: "#14CA74", cloisons: "#8F9BB6", obstacles: "#B07D45", portes: "#E07B39", deflecteurs: "#C9A23F" };
-const ICONES = { evaps: "❄", echelles: "▤", cloisons: "▮", obstacles: "■", portes: "⌂", deflecteurs: "◜" };
-const AFF0 = { particules: true, lignes: false, coupe: false, vecteurs: false, mortes: false, couleurProduits: false, murs: true, plafond: false, etiquettes: true, axe: "z", pos: null, densite: 2500, vitesseAnim: 1 };
+const COULEURS = { evaps: "#3D7BFF", echelles: "#14CA74", cloisons: "#8F9BB6", obstacles: "#B07D45", portes: "#E07B39", deflecteurs: "#C9A23F", pieces: "#5B6B8C" };
+const ICONES = { evaps: "❄", echelles: "▤", cloisons: "▮", obstacles: "■", portes: "⌂", deflecteurs: "◜", pieces: "⬚" };
+const AFF0 = { particules: true, lignes: false, coupe: false, vecteurs: false, mortes: false, couleurProduits: false, murs: true, plafond: false, etiquettes: true, pieces: true, axe: "z", pos: null, densite: 2500, vitesseAnim: 1 };
 
 export function demarrer() {
   const store = creerStore();
@@ -40,7 +40,7 @@ export function demarrer() {
       vue = creerVue($("vue3d"), {
         onPick: (id, produit) => { selectionner(id || "chambre"); if (produit) choisirProduit(id, produit.chariot, produit.niveau); },
         onDrag: (id, v) => deplacer(id, v),
-        onDragFin: () => { glisse = false; demanderApercu(true); rendreProp(); },
+        onDragFin: () => { glisse = false; const t = trouver(projet, sel); if (!t || t.liste !== "pieces") demanderApercu(true); rendreProp(); },
         onSonde: s => afficherSonde(s),
         onCote: (a, b) => { memoriser(); const c = normaliserCote({ a, b }); projet.cotes.push(c); derniereCote = mesure(c.a, c.b); majCotes(); },
         onCoteSuppr: id => { memoriser(); projet.cotes = projet.cotes.filter(c => c.id !== id); majCotes(); },
@@ -110,7 +110,8 @@ export function demarrer() {
   function apresModif(opts) {
     opts = opts || {};
     store.enregistrer(projet);
-    if (champs.cfd) { cfdPerime = true; if (mode === "cfd") { mode = "apercu"; } }
+    // Pièces voisines : décor, le calcul reste valable
+    if (champs.cfd && !opts.decor) { cfdPerime = true; if (mode === "cfd") { mode = "apercu"; } }
     majBoutonsCalcul();
     if (vue) {
       if (opts.objet) vue.majObjet(opts.objet.liste, opts.objet.objet);
@@ -119,7 +120,7 @@ export function demarrer() {
     }
     rendreListes(); rendreResume();
     if (!opts.sansPanneau) rendreProp();
-    demanderApercu();
+    if (!opts.decor) demanderApercu();
   }
   function restaurer(json) {
     projet = normaliser(JSON.parse(json));
@@ -141,7 +142,7 @@ export function demarrer() {
     if (!glisse) { memoriser(); glisse = true; }
     Object.assign(t.objet, v);
     garderDedans(t.liste, t.objet, projet.chambre);
-    apresModif({ objet: t, sansPanneau: true });
+    apresModif({ objet: t, sansPanneau: true, decor: t.liste === "pieces" });
   }
 
   function ajouterObjet(liste) {
@@ -150,6 +151,7 @@ export function demarrer() {
     if (liste === "evaps") { v.x = k.W / 2; v.y = 0.5; v.dir = 90; }
     else if (liste === "echelles") { v.x = k.W / 2; v.y = k.B / 2; v.n = 4; v.rangees = 1; }
     else if (liste === "portes") { v.x = k.W * 0.5; v.y = k.B; }
+    else if (liste === "pieces") Object.assign(v, collerPiece(Object.assign({}, { L: 3, l: 3 }), projet.chambre, murLibre(projet.pieces, projet.chambre)), { H: k.H });
     else if (liste === "deflecteurs") {
       // Sur le mur que vise le soufflage du premier évaporateur
       const e = projet.evaps.find(x => !x.off);
@@ -157,7 +159,7 @@ export function demarrer() {
     }
     const o = ajouter(projet, liste, v);
     garderDedans(liste, o, projet.chambre);
-    apresModif();
+    apresModif({ decor: liste === "pieces" });
     selectionner(o.id);
   }
 
@@ -168,9 +170,11 @@ export function demarrer() {
     else if (nom === "dupliquer") { const o = dupliquer(projet, t.liste, sel); garderDedans(t.liste, o, projet.chambre); sel = o.id; }
     else if (nom === "masquer") t.objet.off = !t.objet.off;
     else if (nom === "pivoter" && "dir" in t.objet) t.objet.dir = (t.objet.dir + 90) % 360;
+    else if (nom === "pivoter" && t.liste === "pieces") [t.objet.L, t.objet.l] = [t.objet.l, t.objet.L];
+    else if (nom.startsWith("coller-") && t.liste === "pieces") Object.assign(t.objet, collerPiece(t.objet, projet.chambre, nom.slice(7)));
     else if (nom === "pivoter" && t.liste === "cloisons") { const o = t.objet, cx = (o.x0 + o.x1) / 2, cy = (o.y0 + o.y1) / 2; [o.x0, o.y0, o.x1, o.y1] = [cx - (o.y0 - cy), cy + (o.x0 - cx), cx - (o.y1 - cy), cy + (o.x1 - cx)]; garderDedans("cloisons", o, projet.chambre); }
     if (t.objet && nom === "pivoter") garderDedans(t.liste, t.objet, projet.chambre);
-    apresModif();
+    apresModif({ decor: t.liste === "pieces" });
     if (vue) vue.selection(sel === "chambre" ? null : sel);
   }
 
@@ -206,6 +210,7 @@ export function demarrer() {
       const n = normaliserObjet(t.liste, o, projet.chambre);
       Object.keys(o).forEach(k => delete o[k]); Object.assign(o, n);
       garderDedans(t.liste, o, projet.chambre);
+      if (t.liste === "pieces") { apresModif({ decor: true }); return; }
     }
     apresModif();
   }
@@ -219,7 +224,7 @@ export function demarrer() {
     let h = "";
     LISTES.forEach(l => {
       h += '<div class="grp"><div class="grp-h"><h3>' + TYPES[l].plusieurs + '</h3><button type="button" data-ajout="' + l + '" title="Ajouter : ' + TYPES[l].seul.toLowerCase() + '">+ Ajouter</button></div>';
-      if (!projet[l].length) h += '<div class="vide">Aucun' + (l === "echelles" || l === "cloisons" || l === "portes" ? "e" : "") + " " + TYPES[l].seul.toLowerCase().replace("groupe d'échelles", "échelle") + "</div>";
+      if (!projet[l].length) h += '<div class="vide">Aucun' + (l === "echelles" || l === "cloisons" || l === "portes" || l === "pieces" ? "e" : "") + " " + TYPES[l].seul.toLowerCase().replace("groupe d'échelles", "échelle") + "</div>";
       projet[l].forEach(o => {
         h += '<button type="button" class="it' + (o.off ? " off" : "") + '" data-sel="' + o.id + '" aria-current="' + (sel === o.id) + '"><span class="ic" style="background:' + COULEURS[l] + '">' + ICONES[l] + '</span><span class="nm">' + esc(o.nom) + "<small>" + esc(resumeObjet(l, o)) + "</small></span>" +
           (l === "evaps" ? '<span class="eye" role="button" tabindex="0" data-oeil="' + o.id + '" title="' + (o.off ? "Réafficher" : "Simuler sans cet appareil") + '">' + (o.off ? "◌" : "◉") + "</span>" : "") + "</button>";

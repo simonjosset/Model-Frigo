@@ -252,6 +252,26 @@ export function boiteObjet(liste, o, ch) {
   return null;
 }
 
+/* ---------- Pièce voisine (décor) ---------- */
+export function pieceGeo(o) {
+  return { box: { x0: o.x - o.L / 2, x1: o.x + o.L / 2, y0: o.y - o.l / 2, y1: o.y + o.l / 2, z0: 0, z1: o.H } };
+}
+export const MURS_PIECE = { avant: "Avant", fond: "Fond", gauche: "Gauche", droite: "Droite" };
+/* Pièce collée contre un mur du rectangle de la chambre, sur toute sa longueur ; profondeur = son petit côté */
+export function collerPiece(o, ch, mur) {
+  const k = dims(ch), p = Math.min(o.L, o.l);
+  if (mur === "avant" || mur === "fond") return { x: k.W / 2, y: mur === "avant" ? -p / 2 : k.B + p / 2, L: k.W, l: p };
+  return { x: mur === "gauche" ? -p / 2 : k.W + p / 2, y: k.B / 2, L: p, l: k.B };
+}
+/* Premier mur sans pièce collée (avant, fond, gauche, droite) */
+export function murLibre(pieces, ch) {
+  const k = dims(ch), pris = m => (pieces || []).some(o => {
+    const b = pieceGeo(o).box;
+    return m === "avant" ? b.y1 <= 0.05 && b.y1 > -0.5 : m === "fond" ? b.y0 >= k.B - 0.05 && b.y0 < k.B + 0.5 : m === "gauche" ? b.x1 <= 0.05 && b.x1 > -0.5 : b.x0 >= k.W - 0.05 && b.x0 < k.W + 0.5;
+  });
+  return Object.keys(MURS_PIECE).find(m => !pris(m)) || "avant";
+}
+
 /* Ramène un objet dans l'emprise de la chambre (rectangle englobant, puis branche du L) */
 export function garderDedans(liste, o, ch) {
   const k = dims(ch);
@@ -259,6 +279,7 @@ export function garderDedans(liste, o, ch) {
     o.x0 = clamp(o.x0, 0, k.W); o.x1 = clamp(o.x1, 0, k.W); o.y0 = clamp(o.y0, 0, k.B); o.y1 = clamp(o.y1, 0, k.B);
     return;
   }
+  if (liste === "pieces") return; // décor : autour de la chambre, pas dedans
   if (liste === "portes") { const s = porteSnap(ch, o); o.x = s.x; o.y = s.y; return; }
   if (liste === "deflecteurs") { const s = porteSnap(ch, { x: o.x, y: o.y, w: o.longueur }); o.x = s.x; o.y = s.y; return; }
   const bx = boiteObjet(liste, o, ch); if (!bx) return;
