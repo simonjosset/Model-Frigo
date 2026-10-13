@@ -1,8 +1,8 @@
 /* Maillage de la chambre en cellules cubiques (ou presque) : parois, évaporateurs, cloisons,
    obstacles pleins, échelles chargées traitées en milieu poreux. Commun à l'aperçu et au calcul fin. */
-import { dims, volume, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, distSegment, dansEncoche, retombeesEvap, basRetombeeAuto } from "./geometrie.js";
+import { dims, volume, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, distSegment, dansEncoche, retombeesEvap, basRetombeeAuto, deflecteurGeo, derriereDeflecteur } from "./geometrie.js";
 
-export const SOLIDE = { fluide: 0, paroi: 1, evap: 2, cloison: 3, obstacle: 4 };
+export const SOLIDE = { fluide: 0, paroi: 1, evap: 2, cloison: 3, obstacle: 4, deflecteur: 5 };
 
 /* Taille de maille pour un nombre de cellules visé */
 export function tailleMaille(ch, cellules) {
@@ -55,6 +55,15 @@ export function construireGrille(projet, opts) {
         if (distSegment((i + 0.5) * dx, (j + 0.5) * dy, c.x0, c.y0, c.x1, c.y1) > seuil + 1e-9) continue;
         for (let kk = k0; kk <= k1; kk++) if (!solide[id(i, j, kk)]) solide[id(i, j, kk)] = SOLIDE.cloison;
       }
+  }
+  // Déflecteurs d'angle : le coin derrière l'arrondi est plein
+  for (const o of projet.deflecteurs || []) {
+    const g = deflecteurGeo(o, ch), b = g.box;
+    const [i0, i1] = plage(b.x0 - dx, b.x1 + dx, dx, nx), [j0, j1] = plage(b.y0 - dy, b.y1 + dy, dy, ny), [k0, k1] = plage(b.z0, b.z1, dz, nz);
+    for (let kk = k0; kk <= k1; kk++) for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const c = id(i, j, kk);
+      if (!solide[c] && derriereDeflecteur(g, (i + 0.5) * dx, (j + 0.5) * dy, (kk + 0.5) * dz, k.H)) solide[c] = SOLIDE.deflecteur;
+    }
   }
   // Obstacles : pleins ou poreux
   for (const o of projet.obstacles) {

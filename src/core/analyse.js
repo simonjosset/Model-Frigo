@@ -2,7 +2,7 @@
    échelles, alertes. Fonctionne sur l'aperçu comme sur le calcul fin. */
 import { vitesse } from "./champ.js";
 import { distanceLibre, plage, SOLIDE } from "./grille.js";
-import { dims, volume, porteSnap, obstacleGeo, dansEncoche, distSegment } from "./geometrie.js";
+import { dims, volume, porteSnap, obstacleGeo, dansEncoche, distSegment, deflecteurGeo } from "./geometrie.js";
 
 function fr(x, d) { return (+x).toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d }); }
 
@@ -234,6 +234,7 @@ function chevauchements(projet, G) {
   G.evaps.forEach(ev => bx.push({ nom: ev.e.nom, b: ev.geo.box }));
   G.echelles.forEach(eg => { const i = eg.geo.info; eg.geo.chariots.forEach((c, n) => bx.push({ nom: eg.e.nom, grp: eg.e.id, b: { x0: c.x0, x1: c.x1, y0: c.y0, y1: c.y1, z0: 0, z1: i.H } })); });
   projet.obstacles.forEach(o => bx.push({ nom: o.nom, b: obstacleGeo(o).box }));
+  (projet.deflecteurs || []).forEach(o => bx.push({ nom: o.nom, b: deflecteurGeo(o, projet.chambre).box }));
   const out = [], vu = {};
   for (let a = 0; a < bx.length; a++) for (let b = a + 1; b < bx.length; b++) {
     const A = bx[a], B = bx[b];

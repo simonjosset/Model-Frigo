@@ -1,6 +1,6 @@
 /* Panneaux de propriétés : HTML des formulaires (chambre, objets, réglages) et lecture des saisies. */
 import { CATALOGUE } from "../core/produits.js";
-import { dims, surface, volume, evapGeo, echellesGeo, cloisonGeo, polygone, COINS, retombeesEvap, basRetombeeAuto } from "../core/geometrie.js";
+import { dims, surface, volume, evapGeo, echellesGeo, cloisonGeo, polygone, COINS, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "../core/geometrie.js";
 import { MAILLES } from "../core/modele.js";
 import { couleur } from "../core/champ.js";
 
@@ -235,7 +235,20 @@ function tableauVitesses(ec, opts) {
 }
 function couleurCss(v) { const c = couleur(v); return "rgb(" + c.map(Math.round).join(",") + ")"; }
 
+function panneauDeflecteur(p, o) {
+  const g = deflecteurGeo(o, p.chambre);
+  let h = titre(o, "Déflecteur arrondi dans l'angle " + (g.haut ? "plafond / mur" : "sol / mur"));
+  h += '<div class="sec"><h4>Déflecteur</h4><div class="grid">' + sel(o, "angle", "Angle", [["plafond", "Plafond / mur"], ["sol", "Sol / mur"]], { w2: true }) +
+    num(o, "rayon", "Rayon de l'arrondi", "m") + '<div><label>Diamètre équivalent</label><div class="f"><input readonly value="' + aff(2 * g.R, 2) + '"><span class="u">m</span></div></div>' +
+    num(o, "longueur", "Longueur le long du mur", "m") + "<div></div>" +
+    num(o, "x", "Position x (centre)", "m") + num(o, "y", "Position y (centre)", "m") + "</div>";
+  h += '<p class="hint">Quart de cercle qui arrondit l\'angle : il avance de R ' + (g.haut ? "sous le plafond" : "sur le sol") + ' et ' + (g.haut ? "descend" : "monte") + ' de R le long du mur. Le jet qui longe le plafond tourne en douceur au lieu de buter dans l\'angle. Il se place sur le mur le plus proche : faites-le glisser le long des murs.</p>';
+  h += info([["Longueur posée", fr(g.L, 2) + " m"], ["Encombrement", fr(g.R, 2) + " × " + fr(g.R, 2) + " m dans l'angle"]]) + "</div>" + actions("deflecteurs", o);
+  return h;
+}
+
 export function panneauObjet(p, liste, o, R, opts) {
+  if (liste === "deflecteurs") return panneauDeflecteur(p, o);
   if (liste === "evaps") return panneauEvap(p, o, R);
   if (liste === "echelles") return panneauEchelles(p, o, R, opts);
   if (liste === "cloisons") return panneauCloison(p, o);
@@ -265,5 +278,6 @@ export function resumeObjet(liste, o) {
   if (liste === "echelles") { const g = echellesGeo(o); return g.total + " éch. · " + fr(g.total * g.info.nb, 0) + " produits"; }
   if (liste === "cloisons") { return "L " + fr(Math.hypot(o.x1 - o.x0, o.y1 - o.y0), 2) + " m" + (o.zh != null || o.zb > 0 ? " · partielle" : ""); }
   if (liste === "obstacles") return fr(o.L, 2) + " × " + fr(o.l, 2) + " × " + fr(o.h, 2) + " m" + (o.poreux > 0.01 ? " · ajouré" : "");
+  if (liste === "deflecteurs") return "R " + fr(o.rayon, 2) + " m · L " + fr(o.longueur, 2) + " m · " + (o.angle === "sol" ? "sol" : "plafond");
   return fr(o.w, 2) + " × " + fr(o.h, 2) + " m";
 }

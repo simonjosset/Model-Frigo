@@ -16,9 +16,10 @@ export const TYPES = {
   echelles: { seul: "Groupe d'échelles", plusieurs: "Échelles", prefixe: "Échelles " },
   cloisons: { seul: "Cloison", plusieurs: "Cloisons", prefixe: "Cloison " },
   obstacles: { seul: "Obstacle", plusieurs: "Obstacles", prefixe: "Obstacle " },
-  portes: { seul: "Porte", plusieurs: "Portes", prefixe: "Porte " }
+  portes: { seul: "Porte", plusieurs: "Portes", prefixe: "Porte " },
+  deflecteurs: { seul: "Déflecteur d'angle", plusieurs: "Déflecteurs d'angle", prefixe: "Déflecteur " }
 };
-export const LISTES = ["evaps", "echelles", "cloisons", "obstacles", "portes"];
+export const LISTES = ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs"];
 
 export const MAILLES = {
   rapide: { nom: "Rapide", cellules: 40000 },
@@ -53,7 +54,11 @@ export function obstacleDefaut(ch) {
 export function porteDefaut(ch) {
   return { x: ch.longueur * 0.8, y: ch.largeur, w: 1.2, h: 2.2 };
 }
-const DEFAUTS = { evaps: evapDefaut, echelles: echellesDefaut, cloisons: cloisonDefaut, obstacles: obstacleDefaut, portes: porteDefaut };
+/* Déflecteur arrondi (quart de cercle) dans l'angle plafond / mur ou sol / mur, accroché au mur le plus proche */
+export function deflecteurDefaut(ch) {
+  return { x: ch.longueur / 2, y: 0, longueur: 3, rayon: 0.6, angle: "plafond" };
+}
+const DEFAUTS = { evaps: evapDefaut, echelles: echellesDefaut, cloisons: cloisonDefaut, obstacles: obstacleDefaut, portes: porteDefaut, deflecteurs: deflecteurDefaut };
 
 /* Projet d'exemple : chambre de stockage de glaces (nom de code uniquement) */
 export function projetExemple() {
@@ -61,7 +66,7 @@ export function projetExemple() {
   const p = {
     format: FORMAT, version: VERSION, nom: "Projet Alpha", maj: Date.now(),
     chambre: ch, reglages: reglagesDefaut(),
-    evaps: [], echelles: [], cloisons: [], obstacles: [], portes: []
+    evaps: [], echelles: [], cloisons: [], obstacles: [], portes: [], deflecteurs: []
   };
   ajouter(p, "evaps", { x: 4.5, y: 5.8, dir: 270, q: 9000, T: 8, dv: 0.45 });
   const a = ajouter(p, "echelles", { x: 4.2, y: 3.1, n: 7, rangees: 2 });
@@ -144,6 +149,9 @@ export function normaliserObjet(liste, o, ch) {
     r.x = n(r.x, d.x); r.y = n(r.y, d.y); r.dir = angle(r.dir);
     r.L = n(r.L, d.L, 0.05, 30); r.l = n(r.l, d.l, 0.05, 30); r.h = n(r.h, d.h, 0.05, 20); r.zb = n(r.zb, 0, 0, 20);
     r.poreux = n(r.poreux, 0, 0, 0.95);
+  } else if (liste === "deflecteurs") {
+    r.x = n(r.x, d.x); r.y = n(r.y, d.y); r.longueur = n(r.longueur, d.longueur, 0.2, 200); r.rayon = n(r.rayon, d.rayon, 0.1, 3);
+    r.angle = r.angle === "sol" ? "sol" : "plafond";
   } else if (liste === "portes") {
     r.x = n(r.x, d.x); r.y = n(r.y, d.y); r.w = n(r.w, d.w, 0.4, 8); r.h = n(r.h, d.h, 0.5, 8);
   }

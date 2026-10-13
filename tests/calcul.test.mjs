@@ -6,7 +6,7 @@ import { calculerApercu } from "../src/core/apercu.js";
 import { preparer, pas, divergence, demarrer } from "../src/core/cfd.js";
 import { vitesse } from "../src/core/champ.js";
 import { analyser } from "../src/core/analyse.js";
-import { evapGeo, retombeesEvap } from "../src/core/geometrie.js";
+import { evapGeo, retombeesEvap, deflecteurGeo } from "../src/core/geometrie.js";
 import { simuler } from "../src/core/simulation.js";
 
 const salle = extra => normaliser(Object.assign({ chambre: { longueur: 10, largeur: 6, H: 3.5 }, evaps: [{ nom: "E", x: 0.6, y: 3, dir: 0, len: 1.8, dep: 0.5, eh: 0.5, nf: 2, dv: 0.45, q: 6000, T: 7 }] }, extra || {}));
@@ -135,4 +135,19 @@ test("retombée anti-bypass : panneau devant l'évaporateur, du plafond jusqu'au
   assert.ok(analyser(p, calculerApercu(p)).alertes.some(a => /mal placée/.test(a.titre)));
   Object.assign(p.evaps[0], { coudeAvance: 2.0, retombeeDist: 1.1 });
   assert.ok(!analyser(p, calculerApercu(p)).alertes.some(a => /mal placée/.test(a.titre)), "entre sortie et reprise : pas d'alerte");
+});
+
+test("déflecteur d'angle : accroché au mur, coin plafond / mur plein derrière l'arrondi", () => {
+  const p = salle({ deflecteurs: [{ x: 9.7, y: 3, longueur: 4, rayon: 0.8, angle: "plafond" }] });
+  const g = deflecteurGeo(p.deflecteurs[0], p.chambre);
+  assert.equal(g.x, 10); assert.ok(Math.abs(g.ix + 1) < 1e-9, "arrondi tourné vers l'intérieur (−x)");
+  const G = construireGrille(p, { h: 0.1 }), cell = (x, y, z) => G.solide[G.id(Math.floor(x / G.dx), Math.floor(y / G.dy), Math.floor(z / G.dz))];
+  assert.equal(cell(9.95, 3, 3.45), 5, "tout contre l'angle : plein");
+  assert.equal(cell(9.5, 3, 3.0), 0, "devant l'arrondi : air");
+  assert.equal(cell(9.95, 0.5, 3.45), 0, "hors de la longueur du déflecteur : air");
+  const F = calculerApercu(p, { grille: G });
+  assert.ok(F.mag.every(Number.isFinite));
+  p.deflecteurs[0].angle = "sol";
+  const G2 = construireGrille(p, { h: 0.1 });
+  assert.equal(G2.solide[G2.id(Math.floor(9.95 / G2.dx), Math.floor(3 / G2.dy), 0)], 5, "angle sol / mur plein");
 });

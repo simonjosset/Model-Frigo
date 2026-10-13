@@ -184,6 +184,29 @@ export function porteSnap(ch, d) {
   return best;
 }
 
+/* Déflecteur d'angle : quart de cercle de rayon R contre un mur, sous le plafond (ou sur le sol).
+   L'air ne peut pas aller derrière : le coin entre l'arrondi, le mur et le plafond est plein. */
+export function deflecteurGeo(o, ch) {
+  const k = dims(ch), s = porteSnap(ch, { x: o.x, y: o.y, w: o.longueur }), R = Math.min(o.rayon, k.H / 2);
+  const ix = -s.nx, iy = -s.ny; // vers l'intérieur de la chambre
+  const L = s.w, haut = o.angle !== "sol";
+  const ax = s.x - s.ex * L / 2, ay = s.y - s.ey * L / 2, bx = s.x + s.ex * L / 2, by = s.y + s.ey * L / 2;
+  const xs = [ax, bx, ax + ix * R, bx + ix * R], ys = [ay, by, ay + iy * R, by + iy * R];
+  return {
+    x: s.x, y: s.y, ex: s.ex, ey: s.ey, ix, iy, L, R, haut, mur: s.mur,
+    zc: haut ? k.H - R : R, // axe de l'arrondi
+    box: { x0: Math.min.apply(null, xs), x1: Math.max.apply(null, xs), y0: Math.min.apply(null, ys), y1: Math.max.apply(null, ys), z0: haut ? k.H - R : 0, z1: haut ? k.H : R }
+  };
+}
+/* Vrai si le point (x, y, z) est derrière l'arrondi (zone pleine) */
+export function derriereDeflecteur(g, x, y, z, H) {
+  const t = (x - g.x) * g.ex + (y - g.y) * g.ey, d = (x - g.x) * g.ix + (y - g.y) * g.iy;
+  if (Math.abs(t) > g.L / 2 || d < -0.05 || d > g.R) return false;
+  const dz = g.haut ? H - z : z;
+  if (dz < 0 || dz > g.R) return false;
+  return (g.R - d) * (g.R - d) + (g.R - dz) * (g.R - dz) > g.R * g.R;
+}
+
 /* Boîte en plan d'un objet, pour le garder dans la chambre lors d'un déplacement */
 export function boiteObjet(liste, o, ch) {
   if (liste === "evaps") return evapGeo(o, ch).box;
@@ -200,6 +223,7 @@ export function garderDedans(liste, o, ch) {
     return;
   }
   if (liste === "portes") { const s = porteSnap(ch, o); o.x = s.x; o.y = s.y; return; }
+  if (liste === "deflecteurs") { const s = porteSnap(ch, { x: o.x, y: o.y, w: o.longueur }); o.x = s.x; o.y = s.y; return; }
   const bx = boiteObjet(liste, o, ch); if (!bx) return;
   const hx = (bx.x1 - bx.x0) / 2, hy = (bx.y1 - bx.y0) / 2, ox = o.x - (bx.x0 + bx.x1) / 2, oy = o.y - (bx.y0 + bx.y1) / 2;
   let cx = clamp(o.x - ox, hx, Math.max(hx, k.W - hx)), cy = clamp(o.y - oy, hy, Math.max(hy, k.B - hy));

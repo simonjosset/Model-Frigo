@@ -8,8 +8,8 @@ import { panneauChambre, panneauObjet, panneauReglages, resumeObjet, lireNombre,
 import { creerVue, webglDisponible } from "../vue3d/vue.js";
 
 const $ = id => document.getElementById(id);
-const COULEURS = { evaps: "#3D7BFF", echelles: "#14CA74", cloisons: "#8F9BB6", obstacles: "#B07D45", portes: "#E07B39" };
-const ICONES = { evaps: "❄", echelles: "▤", cloisons: "▮", obstacles: "■", portes: "⌂" };
+const COULEURS = { evaps: "#3D7BFF", echelles: "#14CA74", cloisons: "#8F9BB6", obstacles: "#B07D45", portes: "#E07B39", deflecteurs: "#C9A23F" };
+const ICONES = { evaps: "❄", echelles: "▤", cloisons: "▮", obstacles: "■", portes: "⌂", deflecteurs: "◜" };
 const AFF0 = { particules: true, lignes: false, coupe: false, vecteurs: false, mortes: false, couleurProduits: false, murs: true, plafond: false, etiquettes: true, axe: "z", pos: null, densite: 2500, vitesseAnim: 1 };
 
 export function demarrer() {
@@ -144,6 +144,11 @@ export function demarrer() {
     if (liste === "evaps") { v.x = k.W / 2; v.y = 0.5; v.dir = 90; }
     else if (liste === "echelles") { v.x = k.W / 2; v.y = k.B / 2; v.n = 4; v.rangees = 1; }
     else if (liste === "portes") { v.x = k.W * 0.5; v.y = k.B; }
+    else if (liste === "deflecteurs") {
+      // Sur le mur que vise le soufflage du premier évaporateur
+      const e = projet.evaps.find(x => !x.off);
+      if (e) { const g = evapGeo(e, projet.chambre); v.x = Math.min(k.W, Math.max(0, e.x + g.u[0] * 1000)); v.y = Math.min(k.B, Math.max(0, e.y + g.u[1] * 1000)); v.longueur = Math.max(1, e.len + 0.6); }
+    }
     const o = ajouter(projet, liste, v);
     garderDedans(liste, o, projet.chambre);
     apresModif();

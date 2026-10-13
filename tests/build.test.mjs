@@ -23,5 +23,5 @@ test("aucun nom de client réel : le projet d'exemple porte un nom de code", asy
   const { projetExemple } = await import("../src/core/modele.js");
   const p = projetExemple();
   assert.match(p.nom, /^Projet [A-Z][a-z]+$/);
-  for (const l of ["evaps", "echelles", "cloisons", "obstacles", "portes"]) for (const o of p[l]) assert.match(o.nom, /^(Évap|Échelles|Cloison|Obstacle|Porte) /);
+  for (const l of ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs"]) for (const o of p[l]) assert.match(o.nom, /^(Évap|Échelles|Cloison|Obstacle|Porte|Déflecteur) /);
 });

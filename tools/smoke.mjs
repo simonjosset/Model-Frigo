@@ -72,6 +72,16 @@ await page.screenshot({ path: path.join(SHOTS, "1b-salle-en-L.png") });
 await page.click("#bAnnuler"); await page.click("#bAnnuler"); await page.click("#bAnnuler");
 check("annuler : retour à la salle rectangulaire", await page.evaluate(() => MF.projet().chambre.forme === "rect"));
 
+// Déflecteur d'angle
+await page.click('[data-ajout="deflecteurs"]');
+check("déflecteur d'angle ajouté", await page.evaluate(() => MF.projet().deflecteurs.length === 1) && await page.isVisible("#f_rayon"));
+await page.fill("#f_rayon", "0,8"); await page.press("#f_rayon", "Enter");
+check("déflecteur : rayon saisi", await page.evaluate(() => MF.projet().deflecteurs[0].rayon === 0.8));
+await page.waitForTimeout(400);
+await page.screenshot({ path: path.join(SHOTS, "1c-deflecteur.png") });
+await page.click("#bAnnuler"); await page.click("#bAnnuler");
+check("annuler : déflecteur retiré", await page.evaluate(() => MF.projet().deflecteurs.length === 0));
+
 // Calques
 for (const c of ["lignes", "coupe", "mortes", "couleurProduits"]) await page.click('[data-aff="' + c + '"]');
 check("coupe : barre de réglage affichée", await page.isVisible("#coupeBar"));

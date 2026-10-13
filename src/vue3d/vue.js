@@ -6,7 +6,7 @@ import {
   MeshLambertMaterial, MeshBasicMaterial, LineBasicMaterial, LineSegments, InstancedMesh, Object3D, Plane, DoubleSide, MOUSE, TOUCH, EdgesGeometry, Box3, TubeGeometry, QuadraticBezierCurve3
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { dims, polygone, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteSnap, retombeesEvap, basRetombeeAuto } from "../core/geometrie.js";
+import { dims, polygone, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "../core/geometrie.js";
 import { produitsLocaux, ROUES } from "../core/produits.js";
 import { creerFlux } from "./flux.js";
 
@@ -87,6 +87,7 @@ export function creerVue(conteneur, cb) {
     M.grille = new LineBasicMaterial({ color: s ? 0x3a4a78 : 0xc6cee0, transparent: true, opacity: 0.6 });
     M.caisson = new MeshLambertMaterial({ color: 0xe6eaf0 });
     M.coude = new MeshLambertMaterial({ color: 0xc3cad4, side: DoubleSide });
+    M.deflecteur = new MeshLambertMaterial({ color: 0xd8b75a, side: DoubleSide, transparent: true, opacity: 0.8 });
     M.retombee = new MeshLambertMaterial({ color: 0x9fb2d6, transparent: true, opacity: 0.55, side: DoubleSide, depthWrite: false });
     M.helice = new MeshLambertMaterial({ color: 0x2b3140, side: DoubleSide });
     M.anneau = new MeshLambertMaterial({ color: 0x3d7bff, side: DoubleSide });
@@ -295,7 +296,24 @@ export function creerVue(conteneur, cb) {
     g.add(new LineSegments(cadre, new LineBasicMaterial({ color: 0xffb27a })));
     return g;
   }
-  const CONSTR = { evaps: construireEvap, echelles: construireEchelles, cloisons: construireCloison, obstacles: construireObstacle, portes: construirePorte };
+  /* Déflecteur d'angle : bande cintrée en quart de cercle, du plafond (ou du sol) jusqu'au mur */
+  function construireDeflecteur(o) {
+    const g = new Group(), d = deflecteurGeo(o, projet.chambre), N = 18, pos = [], idx = [];
+    const vz = d.haut ? 1 : -1, cx = d.x + d.ix * d.R, cy = d.y + d.iy * d.R;
+    for (let q = 0; q <= N; q++) {
+      const a = q / N * Math.PI / 2, h = -Math.sin(a) * d.R, v = Math.cos(a) * d.R * vz; // h : vers le mur, v : vers le plafond (ou le sol)
+      const px = cx + d.ix * h, py = cy + d.iy * h, pz = d.zc + v;
+      pos.push(px - d.ex * d.L / 2, py - d.ey * d.L / 2, pz, px + d.ex * d.L / 2, py + d.ey * d.L / 2, pz);
+      if (q < N) { const b = 2 * q; idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2); }
+    }
+    const geo = new BufferGeometry(); geo.setAttribute("position", new Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
+    g.add(new Mesh(geo, M.deflecteur));
+    const bords = [];
+    for (let q = 0; q < N; q++) for (const c of [0, 1]) { const a = 6 * q + 3 * c; bords.push(pos[a], pos[a + 1], pos[a + 2], pos[a + 6], pos[a + 7], pos[a + 8]); }
+    const bg = new BufferGeometry(); bg.setAttribute("position", new Float32BufferAttribute(bords, 3)); g.add(new LineSegments(bg, M.trait));
+    return g;
+  }
+  const CONSTR = { evaps: construireEvap, echelles: construireEchelles, cloisons: construireCloison, obstacles: construireObstacle, portes: construirePorte, deflecteurs: construireDeflecteur };
 
   function construireObjet(liste, o) {
     if (objets[o.id]) vider(objets[o.id]);
@@ -438,7 +456,7 @@ export function creerVue(conteneur, cb) {
     cb.onPick && cb.onPick(null);
   });
   function objetProjet(id) {
-    for (const l of ["evaps", "echelles", "cloisons", "obstacles", "portes"]) { const o = projet[l].find(x => x.id === id); if (o) return o; }
+    for (const l of ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs"]) { const o = projet[l].find(x => x.id === id); if (o) return o; }
     return null;
   }
 
@@ -458,7 +476,7 @@ export function creerVue(conteneur, cb) {
       projet = p;
       Object.values(objets).forEach(vider); objets = {};
       construireChambre();
-      ["evaps", "echelles", "cloisons", "obstacles", "portes"].forEach(l => p[l].forEach(o => construireObjet(l, o)));
+      ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs"].forEach(l => p[l].forEach(o => construireObjet(l, o)));
       majPickables(); construireEtiquettes(); majSelection(); colorerProduits();
       taille();
       if (premier || !garder) vue("iso", true);
