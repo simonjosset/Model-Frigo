@@ -1,6 +1,6 @@
 /* Modèle Frigo : contrôleur de l'interface (sélection, édition, annulation, calculs, résultats, projets). */
-import { normaliser, normaliserObjet, normaliserCote, ajouter, dupliquer, trouver, projetExemple, TYPES, LISTES, DECOR } from "../core/modele.js";
-import { dims, volume, evapGeo, echellesGeo, garderDedans, collerPiece, murLibre } from "../core/geometrie.js";
+import { normaliser, normaliserObjet, normaliserCote, ajouter, dupliquer, trouver, projetExemple, batimentExemple, batimentVide, TYPES, LISTES, LISTES_PROJET, DECOR } from "../core/modele.js";
+import { dims, volume, surface, evapGeo, echellesGeo, garderDedans, collerPiece, murLibre } from "../core/geometrie.js";
 import { produitDuCatalogue } from "../core/produits.js";
 import { creerStore } from "./store.js";
 import { creerCalculs } from "./calculs.js";
@@ -10,8 +10,8 @@ import { mesure } from "../core/cotes.js";
 import { PALIERS, GRADUATIONS, VMAX_ECHELLE, positionEchelle } from "../core/champ.js";
 
 const $ = id => document.getElementById(id);
-const COULEURS = { evaps: "#3D7BFF", echelles: "#14CA74", cloisons: "#8F9BB6", obstacles: "#B07D45", portes: "#E07B39", deflecteurs: "#C9A23F", pieces: "#5B6B8C", personnes: "#FF8A2A" };
-const ICONES = { evaps: "❄", echelles: "▤", cloisons: "▮", obstacles: "■", portes: "⌂", deflecteurs: "◜", pieces: "⬚", personnes: "☺" };
+const COULEURS = { evaps: "#3D7BFF", echelles: "#14CA74", cloisons: "#8F9BB6", obstacles: "#B07D45", portes: "#E07B39", deflecteurs: "#C9A23F", pieces: "#5B6B8C", personnes: "#FF8A2A", locaux: "#7C8DB5" };
+const ICONES = { evaps: "❄", echelles: "▤", cloisons: "▮", obstacles: "■", portes: "⌂", deflecteurs: "◜", pieces: "⬚", personnes: "☺", locaux: "▣" };
 const AFF0 = { particules: true, lignes: false, coupe: false, vecteurs: false, mortes: false, couleurProduits: false, murs: true, plafond: false, etiquettes: true, pieces: true, axe: "z", pos: null, densite: 2500, vitesseAnim: 1 };
 
 export function demarrer() {
@@ -53,7 +53,7 @@ export function demarrer() {
 
   /* ---------- Calculs ---------- */
   const calculs = creerCalculs({
-    apercu: (F, R) => { champs.apercu = { F, R }; if (mode === "apercu" || !champs.cfd) { mode = "apercu"; afficherChamp(); } else rendreResultats(); },
+    apercu: (F, R) => { if (batiment()) return; champs.apercu = { F, R }; if (mode === "apercu" || !champs.cfd) { mode = "apercu"; afficherChamp(); } else rendreResultats(); },
     cfd: (F, R) => {
       F.info.ms = Date.now() - debutCfd;
       champs.cfd = { F, R }; cfdPerime = false; mode = "cfd"; $("prog").hidden = true; majBoutonsCalcul(); afficherChamp();
@@ -64,8 +64,22 @@ export function demarrer() {
   });
   let debutCfd = 0;
 
+  function batiment() { return projet.type === "batiment"; }
+  /* Type de projet : interface de la chambre froide (flux d'air) ou du bâtiment (implantation) */
+  function majType() {
+    document.body.classList.toggle("mode-batiment", batiment());
+    $("chNom").textContent = batiment() ? "Bâtiment" : "Chambre";
+    document.querySelector('[data-tab="res"]').textContent = batiment() ? "Récapitulatif" : "Résultats";
+    if (batiment()) { calculs.stop(); $("prog").hidden = true; if (vue) vue.setChamp(null, null); }
+  }
+  /* Nom affiché d'un type d'objet (en bâtiment, les obstacles sont des machines ou équipements) */
+  function nomType(l, pluriel) {
+    if (batiment() && l === "obstacles") return pluriel ? "Machines" : "Machine";
+    return pluriel ? TYPES[l].plusieurs : TYPES[l].seul;
+  }
   function demanderApercu(maintenant) {
     clearTimeout(minuteurApercu);
+    if (batiment()) return;
     const go = () => { dernierApercu = Date.now(); calculs.apercu(projet); };
     if (maintenant) go();
     else if (glisse) { if (Date.now() - dernierApercu > 350) go(); else minuteurApercu = setTimeout(go, 350); }
@@ -123,8 +137,10 @@ export function demarrer() {
     if (!opts.decor) demanderApercu();
   }
   function restaurer(json) {
+    const avant = projet.type;
     projet = normaliser(JSON.parse(json));
     if (sel !== "chambre" && !trouver(projet, sel)) sel = "chambre";
+    if (projet.type !== avant) { majType(); majAffichage(); if (!batiment()) demanderApercu(true); }
     apresModif();
     if (vue) vue.selection(sel === "chambre" ? null : sel);
   }
@@ -151,6 +167,8 @@ export function demarrer() {
     if (liste === "evaps") { v.x = k.W / 2; v.y = 0.5; v.dir = 90; }
     else if (liste === "echelles") { v.x = k.W / 2; v.y = k.B / 2; v.n = 4; v.rangees = 1; }
     else if (liste === "portes") { v.x = k.W * 0.5; v.y = k.B; }
+    else if (liste === "locaux") { v.x = k.W / 2; v.y = k.B / 2; }
+    else if (liste === "obstacles" && batiment()) { v.nom = "Machine " + (projet.obstacles.length + 1); v.x = k.W / 2; v.y = k.B / 2; v.L = 3; v.l = 1.5; v.h = 1.8; }
     else if (liste === "pieces") Object.assign(v, collerPiece(Object.assign({}, { L: 3, l: 3 }), projet.chambre, murLibre(projet.pieces, projet.chambre)), { H: k.H });
     else if (liste === "deflecteurs") {
       // Sur le mur que vise le soufflage du premier évaporateur
@@ -170,7 +188,7 @@ export function demarrer() {
     else if (nom === "dupliquer") { const o = dupliquer(projet, t.liste, sel); garderDedans(t.liste, o, projet.chambre); sel = o.id; }
     else if (nom === "masquer") t.objet.off = !t.objet.off;
     else if (nom === "pivoter" && "dir" in t.objet) t.objet.dir = (t.objet.dir + 90) % 360;
-    else if (nom === "pivoter" && t.liste === "pieces") [t.objet.L, t.objet.l] = [t.objet.l, t.objet.L];
+    else if (nom === "pivoter" && (t.liste === "pieces" || t.liste === "locaux")) [t.objet.L, t.objet.l] = [t.objet.l, t.objet.L];
     else if (nom.startsWith("coller-") && t.liste === "pieces") Object.assign(t.objet, collerPiece(t.objet, projet.chambre, nom.slice(7)));
     else if (nom === "pivoter" && t.liste === "cloisons") { const o = t.objet, cx = (o.x0 + o.x1) / 2, cy = (o.y0 + o.y1) / 2; [o.x0, o.y0, o.x1, o.y1] = [cx - (o.y0 - cy), cy + (o.x0 - cx), cx - (o.y1 - cy), cy + (o.x1 - cx)]; garderDedans("cloisons", o, projet.chambre); }
     if (t.objet && nom === "pivoter") garderDedans(t.liste, t.objet, projet.chambre);
@@ -192,6 +210,12 @@ export function demarrer() {
     if (cle.startsWith("aff.")) { const k = cle.slice(4); aff[k] = type === "sel" ? +v : v; majAffichage(); rendreReglages(); return; }
     memoriser();
     if (cle === "projet.nom") { projet.nom = v || "Projet"; majNom(); }
+    else if (cle === "projet.type") {
+      projet.type = v === "batiment" ? "batiment" : "chambre"; sel = "chambre";
+      majType(); apresModif(); majAffichage(); if (vue) { vue.selection(null); vue.vue("iso"); }
+      if (!batiment()) demanderApercu(true);
+      return;
+    }
     else if (cle.startsWith("chambre.")) {
       projet.chambre[cle.slice(8)] = v;
       projet = normaliser(projet);
@@ -219,13 +243,14 @@ export function demarrer() {
   function majNom() { $("nomProjet").textContent = projet.nom; document.title = projet.nom + " · Modèle Frigo"; }
   function rendreListes() {
     const k = dims(projet.chambre);
+    $("chNom").textContent = batiment() ? "Bâtiment" : "Chambre";
     $("chInfo").textContent = (k.L ? "En L · " : "") + fr(k.W, 2) + " × " + fr(k.B, 2) + " × " + fr(k.H, 2) + " m";
     document.querySelector('[data-sel="chambre"]').setAttribute("aria-current", sel === "chambre");
     let h = "";
-    LISTES.forEach(l => {
-      h += '<div class="grp"><div class="grp-h"><h3>' + TYPES[l].plusieurs + '</h3><button type="button" data-ajout="' + l + '" title="Ajouter : ' + TYPES[l].seul.toLowerCase() + '">+ Ajouter</button></div>';
+    LISTES_PROJET[projet.type].forEach(l => {
+      h += '<div class="grp"><div class="grp-h"><h3>' + nomType(l, true) + '</h3><button type="button" data-ajout="' + l + '" title="Ajouter : ' + nomType(l).toLowerCase() + '">+ Ajouter</button></div>';
       if (l === "pieces" && projet[l].length) h += '<label class="chk grp-chk"><input type="checkbox" data-affchk="pieces"' + (aff.pieces ? " checked" : "") + "> Afficher les pièces voisines</label>";
-      if (!projet[l].length) h += '<div class="vide">Aucun' + (l === "echelles" || l === "cloisons" || l === "portes" || l === "pieces" || l === "personnes" ? "e" : "") + " " + TYPES[l].seul.toLowerCase().replace("groupe d'échelles", "échelle") + "</div>";
+      if (!projet[l].length) h += '<div class="vide">Aucun' + (l === "echelles" || l === "cloisons" || l === "portes" || l === "pieces" || l === "personnes" ? "e" : "") + " " + nomType(l).toLowerCase().replace("groupe d'échelles", "échelle") + "</div>";
       projet[l].forEach(o => {
         h += '<button type="button" class="it' + (o.off ? " off" : "") + '" data-sel="' + o.id + '" aria-current="' + (sel === o.id) + '"><span class="ic" style="background:' + COULEURS[l] + '">' + ICONES[l] + '</span><span class="nm">' + esc(o.nom) + "<small>" + esc(resumeObjet(l, o)) + "</small></span>" +
           (l === "evaps" ? '<span class="eye" role="button" tabindex="0" data-oeil="' + o.id + '" title="' + (o.off ? "Réafficher" : "Simuler sans cet appareil") + '">' + (o.off ? "◌" : "◉") + "</span>" : "") + "</button>";
@@ -236,6 +261,12 @@ export function demarrer() {
     majNom();
   }
   function rendreResume() {
+    if (batiment()) {
+      const sL = projet.locaux.reduce((s, o) => s + o.L * o.l, 0);
+      $("resume").innerHTML = "<span>Surface du hall</span><b>" + fr(surface(projet.chambre), 0) + " m²</b><span>Volume du hall</span><b>" + fr(volume(projet.chambre), 0) + " m³</b>" +
+        "<span>Locaux</span><b>" + projet.locaux.length + "</b><span>Surface des locaux</span><b>" + fr(sL, 0) + " m²</b><span>Machines</span><b>" + projet.obstacles.length + "</b>";
+      return;
+    }
     const V = volume(projet.chambre), Q = projet.evaps.filter(e => !e.off).reduce((s, e) => s + e.q, 0);
     let nE = 0, nP = 0, m = 0;
     projet.echelles.forEach(e => { const g = echellesGeo(e); nE += g.total; nP += g.total * g.info.nb; m += g.total * g.info.masse; });
@@ -253,6 +284,7 @@ export function demarrer() {
   }
   function rendreReglages() { $("pane-regl").innerHTML = panneauReglages(projet, aff); }
   function rendreResultats() {
+    if (batiment()) { $("pane-res").innerHTML = recapBatiment(); return; }
     const c = champs[mode] || champs.apercu, el = $("pane-res");
     if (!c) { el.innerHTML = '<h2>Résultats</h2><p class="sous">Calcul en cours…</p>'; return; }
     const R = c.R, F = c.F, i = F.info;
@@ -293,6 +325,18 @@ export function demarrer() {
     h += '<div class="sec"><h4>Contrôles</h4>' + R.alertes.slice().sort((a, b) => rang(a.niveau) - rang(b.niveau)).map(a => '<button type="button" class="al ' + a.niveau + '"' + (a.id ? ' data-sel="' + a.id + '"' : "") + "><b>" + esc(a.titre) + "</b>" + esc(a.texte) + "</button>").join("") + "</div>";
     el.innerHTML = h;
   }
+  /* Bâtiment : récapitulatif des surfaces et volumes */
+  function recapBatiment() {
+    const ch = projet.chambre, ligne = (nom, L, l, H, T) => "<tr><td>" + esc(nom) + '</td><td class="n">' + fr(L * l, 1) + '</td><td class="n">' + fr(L * l * H, 0) + '</td><td class="n">' + (T > 0 ? "+" : "") + fr(T, 0) + "</td></tr>";
+    let h = '<h2>Récapitulatif</h2><p class="sous">Bâtiment · implantation, sans calcul des flux d\'air</p>';
+    h += '<div class="sec"><h4>Volumes</h4><table class="tab-mini"><tr><th>Zone</th><th class="n">m²</th><th class="n">m³</th><th class="n">°C</th></tr>';
+    h += "<tr><td>Hall (enveloppe)</td><td class=\"n\">" + fr(surface(ch), 1) + '</td><td class="n">' + fr(volume(ch), 0) + '</td><td class="n">' + (ch.Ti > 0 ? "+" : "") + fr(ch.Ti, 0) + "</td></tr>";
+    projet.locaux.forEach(o => { h += ligne(o.nom, o.L, o.l, o.H, o.T); });
+    projet.pieces.forEach(o => { h += ligne(o.nom + " (voisine)", o.L, o.l, o.H, o.T); });
+    h += "</table>";
+    if (projet.locaux.length) h += '<p class="hint">Les locaux sont comptés dans le hall : surface du hall hors locaux ≈ ' + fr(surface(ch) - projet.locaux.reduce((s, o) => s + o.L * o.l, 0), 0) + " m².</p>";
+    return h + "</div>";
+  }
   function rang(n) { return n === "bad" ? 0 : n === "warn" ? 1 : 2; }
 
   function choisirOnglet(t) {
@@ -318,9 +362,11 @@ export function demarrer() {
     document.querySelectorAll("[data-aff]").forEach(b => b.setAttribute("aria-pressed", !!aff[b.dataset.aff]));
     document.querySelectorAll("[data-affchk]").forEach(c => { c.checked = !!aff[c.dataset.affchk]; });
     document.querySelectorAll("[data-axe]").forEach(b => b.setAttribute("aria-pressed", b.dataset.axe === aff.axe));
-    $("coupeBar").hidden = !aff.coupe;
+    $("coupeBar").hidden = !aff.coupe || batiment();
     majCoupeBornes();
-    if (vue) vue.setAffichage(Object.assign({}, aff, { vmin: projet.reglages.vmin }));
+    // Bâtiment : pas de champ de vitesses, les calques de flux sont coupés (sans toucher aux préférences)
+    const sansFlux = batiment() ? { particules: false, lignes: false, coupe: false, vecteurs: false, mortes: false, couleurProduits: false } : {};
+    if (vue) vue.setAffichage(Object.assign({}, aff, { vmin: projet.reglages.vmin }, sansFlux));
     try { localStorage.setItem("modele-frigo-affichage", JSON.stringify(aff)); } catch (e) { /* rien */ }
   }
   /* Vitesse de l'air au-dessus d'un produit (clic sur un produit ou une case du tableau) */
@@ -472,7 +518,7 @@ export function demarrer() {
     store.maintenant();
     projet = p; sel = "chambre"; annuler = []; retablir = []; majHisto();
     champs.apercu = null; champs.cfd = null; cfdPerime = false; mode = "apercu"; calculs.stop(); $("prog").hidden = true;
-    aff.pos = null; majAffichage();
+    majType(); aff.pos = null; majAffichage();
     if (vue && vue.coter()) modeCote(false);
     if (vue) { vue.setProjet(projet, false); vue.selection(null); }
     rendreListes(); rendreResume(); rendreProp(); rendreReglages(); majBoutonsCalcul();
@@ -495,6 +541,12 @@ export function demarrer() {
     chargerProjet(store.nouveau({ nom: nom || "Projet", evaps: [], echelles: [], portes: [{ x: 4.5, y: 6.5 }] })); $("dlgProjets").close();
   };
   $("projExemple").onclick = () => { chargerProjet(store.nouveau(projetExemple())); $("dlgProjets").close(); };
+  $("projBatiment").onclick = () => {
+    const nom = prompt("Nom du bâtiment (nom de code, sans nom de client) :", "Bâtiment " + (store.liste().length + 1));
+    if (nom === null) return;
+    chargerProjet(store.nouveau(batimentVide(nom))); $("dlgProjets").close();
+  };
+  $("projBatimentEx").onclick = () => { chargerProjet(store.nouveau(batimentExemple())); $("dlgProjets").close(); };
   $("projExport").onclick = () => telecharger(store.exporter(false), nomFichier(projet.nom) + ".json");
   $("projExportTout").onclick = () => telecharger(store.exporter(true), "modele-frigo-projets.json");
   $("projImport").onclick = () => $("projFichier").click();
@@ -505,7 +557,7 @@ export function demarrer() {
   };
 
   /* ---------- Démarrage ---------- */
-  majLegende();
+  majLegende(); majType();
   if (vue) { vue.setProjet(projet, false); }
   majAffichage(); rendreListes(); rendreResume(); rendreProp(); rendreReglages(); majHisto(); majBoutonsCalcul();
   demanderApercu(true);

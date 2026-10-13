@@ -92,6 +92,8 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .etq{position:absolute;left:0;top:0;font-size:11.5px;font-weight:600;padding:2px 7px;border-radius:4px;background:var(--glass);border:1px solid var(--line);white-space:nowrap;color:var(--ink)}
 .etq.on{border-color:var(--accent);color:var(--accent)}
 .sans-noms .etq:not(.cote){display:none}
+.mode-batiment .flux-seul{display:none!important}
+.etq.lc{border-color:#7C8DB5}
 .etq.cote{display:flex;align-items:center;gap:4px;color:var(--cote);border-color:var(--cote);font-variant-numeric:tabular-nums}
 .etq.cote button{display:none;pointer-events:auto;border:0;background:none;color:inherit;font-size:11px;padding:0 0 0 2px;cursor:pointer;line-height:1}
 .coter .etq.cote button{display:inline}
@@ -246,7 +248,7 @@ dialog::backdrop{background:rgba(3,8,22,.6)}
     <button class="b-ico" type="button" id="bAnnuler" title="Annuler (Ctrl+Z)" aria-label="Annuler"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
     <button class="b-ico" type="button" id="bRetablir" title="Rétablir (Ctrl+Y)" aria-label="Rétablir"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
     <div class="sp"></div>
-    <div class="calc">
+    <div class="calc flux-seul">
       <div class="mode" role="group" aria-label="Champ affiché">
         <button type="button" id="mApercu" aria-pressed="true" title="Modèle de jets simplifié, recalculé à chaque modification">Aperçu</button>
         <button type="button" id="mCfd" aria-pressed="false" disabled title="Résultat du calcul fin">Calcul fin<span class="badge" id="perime" hidden>à relancer</span></button>
@@ -258,7 +260,7 @@ dialog::backdrop{background:rgba(3,8,22,.6)}
   </header>
 
   <aside class="side gauche" aria-label="Objets de la chambre">
-    <div class="grp"><button class="it" type="button" data-sel="chambre"><span class="ic" style="background:#3D7BFF">▢</span><span class="nm">Chambre<small id="chInfo"></small></span></button></div>
+    <div class="grp"><button class="it" type="button" data-sel="chambre"><span class="ic" style="background:#3D7BFF">▢</span><span class="nm"><span id="chNom">Chambre</span><small id="chInfo"></small></span></button></div>
     <div id="listes"></div>
     <div class="resume" id="resume"></div>
   </aside>
@@ -271,13 +273,13 @@ dialog::backdrop{background:rgba(3,8,22,.6)}
       <span class="sep"></span><button type="button" id="bCote" aria-pressed="false" title="Prendre une cote point à point, accrochée aux coins des murs et des objets (M)">Cote</button>
     </div>
     <div class="ov ov-calques bar" role="toolbar" aria-label="Calques d'affichage">
-      <button type="button" data-aff="particules" aria-pressed="true" title="Particules entraînées par l'air">Particules</button>
-      <button type="button" data-aff="lignes" aria-pressed="false" title="Lignes de courant depuis chaque ventilateur">Lignes</button>
-      <button type="button" data-aff="coupe" aria-pressed="false" title="Plan de coupe coloré par la vitesse ; cliquez dessus pour mesurer">Coupe</button>
-      <button type="button" data-aff="vecteurs" aria-pressed="false" title="Flèches de vitesse sur la coupe">Flèches</button>
-      <button type="button" data-aff="mortes" aria-pressed="false" title="Volume où l'air est presque immobile">Zones mortes</button>
-      <button type="button" data-aff="couleurProduits" aria-pressed="false" title="Colorer les produits selon la vitesse de l'air à travers chaque échelle">Produits</button>
-      <span class="sep"></span>
+      <button type="button" class="flux-seul" data-aff="particules" aria-pressed="true" title="Particules entraînées par l'air">Particules</button>
+      <button type="button" class="flux-seul" data-aff="lignes" aria-pressed="false" title="Lignes de courant depuis chaque ventilateur">Lignes</button>
+      <button type="button" class="flux-seul" data-aff="coupe" aria-pressed="false" title="Plan de coupe coloré par la vitesse ; cliquez dessus pour mesurer">Coupe</button>
+      <button type="button" class="flux-seul" data-aff="vecteurs" aria-pressed="false" title="Flèches de vitesse sur la coupe">Flèches</button>
+      <button type="button" class="flux-seul" data-aff="mortes" aria-pressed="false" title="Volume où l'air est presque immobile">Zones mortes</button>
+      <button type="button" class="flux-seul" data-aff="couleurProduits" aria-pressed="false" title="Colorer les produits selon la vitesse de l'air à travers chaque échelle">Produits</button>
+      <span class="sep flux-seul"></span>
       <button type="button" data-aff="murs" aria-pressed="true">Murs</button>
       <button type="button" data-aff="plafond" aria-pressed="false">Plafond</button>
       <button type="button" data-aff="etiquettes" aria-pressed="true">Noms</button>
@@ -286,7 +288,7 @@ dialog::backdrop{background:rgba(3,8,22,.6)}
     <p class="aide" id="aide">Clic : sélectionner · glisser l'objet sélectionné : déplacer (Maj : au centimètre) · glisser ailleurs : tourner · clic droit : décaler · molette : zoom · R : pivoter · Suppr : supprimer</p>
     <div class="prog" id="prog" hidden role="status"><div class="l"><span id="progT">Calcul fin…</span><button type="button" class="b-ghost" id="bStop">Annuler</button></div><div class="tr"><i id="progB"></i></div></div>
     <div class="ov ov-bas">
-      <div class="leg"><div class="t"><span>Vitesse de l'air (m/s)</span><span id="legMode">Aperçu instantané</span></div><div class="g" id="legGrad"></div><div class="e" id="legEch"></div></div>
+      <div class="leg flux-seul"><div class="t"><span>Vitesse de l'air (m/s)</span><span id="legMode">Aperçu instantané</span></div><div class="g" id="legGrad"></div><div class="e" id="legEch"></div></div>
       <div class="coupe" id="coupeBar" hidden><span>Coupe</span><div class="mode" role="group" aria-label="Axe de la coupe"><button type="button" data-axe="z" aria-pressed="true">Horiz.</button><button type="button" data-axe="y" aria-pressed="false">Long.</button><button type="button" data-axe="x" aria-pressed="false">Trans.</button></div><input type="range" id="coupePos" min="0" max="1" step="0.01" aria-label="Position de la coupe"><b id="coupeVal"></b></div>
     </div>
     <div class="sonde" id="sonde" hidden></div>
@@ -311,6 +313,8 @@ dialog::backdrop{background:rgba(3,8,22,.6)}
   <div class="actions">
     <button type="button" class="b-main" id="projNouveau">+ Nouveau projet</button>
     <button type="button" class="b-ghost" id="projExemple">+ Exemple</button>
+    <button type="button" class="b-main" id="projBatiment">+ Nouveau bâtiment</button>
+    <button type="button" class="b-ghost" id="projBatimentEx">+ Exemple bâtiment</button>
     <button type="button" class="b-ghost" id="projExport">Exporter ce projet</button>
     <button type="button" class="b-ghost" id="projExportTout">Exporter tous les projets</button>
     <button type="button" class="b-ghost" id="projImport">Importer un fichier</button>

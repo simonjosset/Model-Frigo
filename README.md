@@ -4,6 +4,9 @@ Modélisation 3D d'une chambre froide, de ses évaporateurs et des flux d'air pr
 
 ## Ce que fait l'outil
 
+Deux types de projet : **chambre froide** (flux d'air, décrit ci-dessous) et **bâtiment** (implantation en 3D d'un hall avec ses locaux, machines, portes et pièces voisines, sans calcul des flux ; récapitulatif des surfaces et volumes ; *Projets* → *+ Nouveau bâtiment* ou *+ Exemple bâtiment*, ou type choisi dans le panneau du projet). Les composants de traitement d'air (CTA, plénums, gaines) viendront s'y poser.
+
+
 - **Chambre** rectangulaire ou en L (rectangle total moins un coin, choisi sur un plan coté), hauteur sous plafond, portes accrochées aux murs.
 - **Évaporateurs** simple flux (reprise arrière) ou double flux (reprise dessous) : débit, portée constructeur, nombre et diamètre des hélices, dimensions, hauteur de pose, sens de soufflage. Option **coudes vers le bas** : une manchette coudée à 90° en sortie de chaque hélice dirige le soufflage verticalement (avancée horizontale et descente réglables). Option **retombée anti-bypass** : panneau vertical attaché à l'évaporateur, du plafond (ou de sous l'appareil) jusqu'au haut des échelles, pour forcer l'air à traverser les produits ; l'outil mesure le jour restant et la part d'air qui passe par-dessus. Sa longueur se règle à la main : poignées aux deux bouts, comme pour une cloison (ou largeur et décalage dans le panneau). Un appareil peut être masqué pour simuler la chambre sans lui.
 - **Échelles** (chariots à glissières) chargées de produits : hauteur, largeur, profondeur, nombre d'étages, produit (pot de glace 3,3 kg, bacs gastronormes, plaques, cartons ou produit personnalisé), produits par étage et étages chargés, rangées d'échelles avec écart et allée. Chaque produit est dessiné dans la 3D ; nombre de produits et masse calculés.
