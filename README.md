@@ -4,7 +4,7 @@ Modélisation 3D d'une chambre froide, de ses évaporateurs et des flux d'air pr
 
 ## Ce que fait l'outil
 
-Deux types de projet : **chambre froide** (flux d'air, décrit ci-dessous) et **bâtiment** (implantation en 3D d'un hall avec ses locaux, machines, portes et pièces voisines, sans calcul des flux ; récapitulatif des surfaces et volumes ; *Projets* → *+ Nouveau bâtiment* ou *+ Exemple bâtiment*, ou type choisi dans le panneau du projet). Les composants de traitement d'air (CTA, plénums, gaines) viendront s'y poser.
+Deux types de projet : **chambre froide** (flux d'air, décrit ci-dessous) et **bâtiment** (implantation en 3D, sans calcul des flux : le bâtiment est fait de **locaux** rectangulaires ou en L qui se collent les uns aux autres quand on les glisse, de **machines** posées dedans ou dehors, de **portes** sur les murs des locaux ; récapitulatif des surfaces et volumes ; *Projets* → *+ Nouveau bâtiment* ou *+ Exemple bâtiment*, ou type choisi dans le panneau du projet). On y pose le **traitement d'air** : CTA (caisson en sections, piquages de soufflage et de reprise), plénums, bouches et grilles (soufflage, reprise, air neuf, rejet), et **gaines** galva rectangulaires ou circulaires et textiles, tracées point à point dans la 3D (bouton *Gaine* ou touche G : accroche aux piquages, faces de plénums, bouches et autres gaines, tracé à angles droits, coudes automatiques). Les sections sont calculées comme dans l'onglet Gaines de Frigobilan (vitesse maximale réglable, 7 m/s par défaut) ou imposées ; le récapitulatif donne les métrés (longueurs, surfaces de tôle et de tissu, coudes).
 
 
 - **Chambre** rectangulaire ou en L (rectangle total moins un coin, choisi sur un plan coté), hauteur sous plafond, portes accrochées aux murs.

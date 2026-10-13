@@ -93,6 +93,13 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .etq.on{border-color:var(--accent);color:var(--accent)}
 .sans-noms .etq:not(.cote){display:none}
 .mode-batiment .flux-seul{display:none!important}
+body:not(.mode-batiment) .batiment-seul{display:none!important}
+.tab-mini.pts input.pt{width:64px;padding:3px 5px;text-align:right;background:var(--field);border:1px solid var(--line);color:var(--ink);border-radius:5px;font:inherit;font-variant-numeric:tabular-nums}
+.etq.ct{border-color:#5C8DD6}
+.tab-mini td.n{white-space:nowrap}
+.etq.ga{color:var(--muted);font-weight:500}
+.sonde .trace-h{display:flex;align-items:center;gap:6px;margin-top:6px}
+.sonde .trace-h input{width:70px;padding:4px 6px;background:var(--field);border:1px solid var(--line);color:var(--ink);border-radius:6px}
 .etq.lc{border-color:#7C8DB5}
 .etq.cote{display:flex;align-items:center;gap:4px;color:var(--cote);border-color:var(--cote);font-variant-numeric:tabular-nums}
 .etq.cote button{display:none;pointer-events:auto;border:0;background:none;color:inherit;font-size:11px;padding:0 0 0 2px;cursor:pointer;line-height:1}
@@ -270,7 +277,7 @@ dialog::backdrop{background:rgba(3,8,22,.6)}
     <p class="msg3d" id="msg3d" hidden>La vue 3D n'est pas disponible : WebGL est désactivé dans ce navigateur.</p>
     <div class="ov ov-vues bar" role="toolbar" aria-label="Vues">
       <button type="button" data-vue="iso">3D</button><button type="button" data-vue="dessus">Dessus</button><button type="button" data-vue="face">Face</button><button type="button" data-vue="cote">Côté</button>
-      <span class="sep"></span><button type="button" id="bCote" aria-pressed="false" title="Prendre une cote point à point, accrochée aux coins des murs et des objets (M)">Cote</button>
+      <span class="sep"></span><button type="button" class="batiment-seul" id="bGaine" aria-pressed="false" title="Tracer une gaine point à point, accrochée aux piquages, plénums et bouches (G)">Gaine</button><button type="button" id="bCote" aria-pressed="false" title="Prendre une cote point à point, accrochée aux coins des murs et des objets (M)">Cote</button>
     </div>
     <div class="ov ov-calques bar" role="toolbar" aria-label="Calques d'affichage">
       <button type="button" class="flux-seul" data-aff="particules" aria-pressed="true" title="Particules entraînées par l'air">Particules</button>
@@ -283,7 +290,7 @@ dialog::backdrop{background:rgba(3,8,22,.6)}
       <button type="button" data-aff="murs" aria-pressed="true">Murs</button>
       <button type="button" data-aff="plafond" aria-pressed="false">Plafond</button>
       <button type="button" data-aff="etiquettes" aria-pressed="true">Noms</button>
-      <button type="button" data-aff="pieces" aria-pressed="true" title="Pièces voisines dessinées autour de la chambre">Pièces</button>
+      <button type="button" class="flux-seul" data-aff="pieces" aria-pressed="true" title="Pièces voisines dessinées autour de la chambre">Pièces</button>
     </div>
     <p class="aide" id="aide">Clic : sélectionner · glisser l'objet sélectionné : déplacer (Maj : au centimètre) · glisser ailleurs : tourner · clic droit : décaler · molette : zoom · R : pivoter · Suppr : supprimer</p>
     <div class="prog" id="prog" hidden role="status"><div class="l"><span id="progT">Calcul fin…</span><button type="button" class="b-ghost" id="bStop">Annuler</button></div><div class="tr"><i id="progB"></i></div></div>
