@@ -35,6 +35,9 @@ async function fontCSS() {
 export async function buildHTML(opts) {
   opts = opts || {};
   let html = await readFile(path.join(root, "src/modele-frigo.html"), "utf8");
+  // Numéro de version (package.json) affiché à côté du logo
+  const version = JSON.parse(await readFile(path.join(root, "package.json"), "utf8")).version;
+  html = html.split("__VERSION__").join(version);
   const fontsMarker = '<style data-inline="fonts"></style>';
   if (!html.includes(fontsMarker)) throw new Error("Marqueur introuvable dans src/modele-frigo.html : " + fontsMarker);
   const fonts = await fontCSS();

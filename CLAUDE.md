@@ -32,6 +32,8 @@ npm run test:e2e     # bout en bout (Chromium)
 
 ## Règles
 
+- À chaque livraison : incrémenter `version` dans `package.json` (affichée à côté du logo) et `VERSION` dans `sw.js`, puis `npm run build`.
+
 - Interface et textes en français ; pc d'abord, l'écran étroit (iPhone) doit rester utilisable.
 - Aucun CDN ni appel réseau : police, Three.js, worker et modules sont intégrés au fichier (vérifié par `tests/build.test.mjs`).
 - Aucun nom de client réel dans le code, les exemples ou les tests : noms de code uniquement (Projet Alpha…).
