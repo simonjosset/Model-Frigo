@@ -1,6 +1,6 @@
 /* Panneaux de propriétés : HTML des formulaires (chambre, objets, réglages) et lecture des saisies. */
 import { CATALOGUE } from "../core/produits.js";
-import { dims, surface, volume, evapGeo, echellesGeo, cloisonGeo, porteCloison, MURS_PIECE, polygone, COINS, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "../core/geometrie.js";
+import { dims, surface, volume, evapGeo, echellesGeo, cloisonGeo, porteCloison, MURS_PIECE, localSurface, polygone, COINS, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "../core/geometrie.js";
 import { MAILLES, TYPES_PROJET } from "../core/modele.js";
 import { couleur } from "../core/champ.js";
 
@@ -45,8 +45,14 @@ function info(lignes) { return '<div class="info">' + lignes.map(l => l ? (l.tot
 /* ---------- Chambre ---------- */
 export function panneauChambre(p) {
   const ch = p.chambre, k = dims(ch), c = x => ({ cle: "chambre." + x }), bat = p.type === "batiment";
-  let h = '<h2><input data-k="projet.nom" data-type="txt" value="' + esc(p.nom) + '" aria-label="Nom du projet" maxlength="80"></h2><p class="sous">Projet · ' + (bat ? "enveloppe du bâtiment (hall principal)" : "géométrie de la chambre froide") + "</p>";
+  let h = '<h2><input data-k="projet.nom" data-type="txt" value="' + esc(p.nom) + '" aria-label="Nom du projet" maxlength="80"></h2><p class="sous">Projet · ' + (bat ? "bâtiment fait de locaux" : "géométrie de la chambre froide") + "</p>";
   h += '<div class="sec"><h4>Type de projet</h4><div class="grid">' + sel(p, "type", "Type", Object.keys(TYPES_PROJET).map(t => [t, TYPES_PROJET[t] + (t === "batiment" ? " (implantation, sans calcul des flux)" : " (flux d\'air)")]), { w2: true, cle: "projet.type" }) + "</div></div>";
+  if (bat) {
+    const S = p.locaux.reduce((s, o) => s + localSurface(o), 0);
+    h += info([["Locaux", String(p.locaux.length)], ["Surface", fr(S, 1) + " m²"], ["Volume", fr(p.locaux.reduce((s, o) => s + localSurface(o) * o.H, 0), 0) + " m³"]]);
+    h += '<p class="note">Le bâtiment est fait de locaux : ajoutez-les (+ Ajouter) et faites-les glisser, ils se collent les uns aux autres. Les machines se posent dedans ou dehors, les portes sur les murs des locaux. Implantation en 3D, sans calcul des flux d\'air.</p>';
+    return h;
+  }
   h += '<div class="sec"><h4>' + (bat ? "Hall (enveloppe du bâtiment)" : "Chambre") + '</h4><div class="grid">' + sel(ch, "forme", "Forme", [["rect", "Rectangulaire"], ["L", "En L"]], { w2: true, cle: "chambre.forme" });
   h += num(ch, "longueur", "Longueur totale (gauche ↔ droite)", "m", c("longueur")) + num(ch, "largeur", "Largeur totale (avant ↔ fond)", "m", c("largeur"));
   h += num(ch, "H", "Hauteur sous plafond", "m", c("H")) + num(ch, "Ti", "Température", "°C", { dec: 0, cle: "chambre.Ti" }) + "</div>";
@@ -215,14 +221,21 @@ function panneauObstacle(p, o) {
   return h;
 }
 
-/* Local dans le bâtiment */
+/* Local du bâtiment : rectangle ou L */
 function panneauLocal(p, o) {
-  let h = titre(o, "Local · " + fr(o.L * o.l, 1) + " m²");
-  h += '<div class="sec"><h4>Dimensions</h4><div class="grid">' + num(o, "L", "Longueur (gauche ↔ droite)", "m") + num(o, "l", "Largeur (avant ↔ fond)", "m") +
-    num(o, "H", "Hauteur sous plafond", "m") + num(o, "T", "Température", "°C", { dec: 0 }) + num(o, "x", "Centre x", "m") + num(o, "y", "Centre y", "m") + "</div>";
-  h += '<label class="chk"><input type="checkbox" data-k="plafond" data-type="chk"' + (o.plafond ? " checked" : "") + "> Plafond (faux plafond ou dalle)</label>";
-  h += info([["Surface", fr(o.L * o.l, 1) + " m²"], ["Volume", fr(o.L * o.l * o.H, 1) + " m³"]]);
-  h += '<p class="hint">Faites glisser le local pour le placer dans le hall, R pour le tourner d\'un quart de tour. Les cotes s\'accrochent à ses angles.</p></div>';
+  const S = localSurface(o);
+  let h = titre(o, "Local" + (o.forme === "L" ? " en L" : "") + " · " + fr(S, 1) + " m²");
+  h += '<div class="sec"><h4>Dimensions</h4><div class="grid">' + sel(o, "forme", "Forme", [["rect", "Rectangulaire"], ["L", "En L"]], { w2: true }) +
+    num(o, "L", "Longueur totale (gauche ↔ droite)", "m") + num(o, "l", "Largeur totale (avant ↔ fond)", "m") +
+    num(o, "H", "Hauteur sous plafond", "m") + num(o, "T", "Température", "°C", { dec: 0 }) + "</div>";
+  if (o.forme === "L") {
+    h += '<p class="hint" style="margin:8px 0 4px">En L : le rectangle total moins un coin.</p><div class="grid">' +
+      sel(o, "coin", "Coin retiré", Object.keys(COINS).map(q => [q, COINS[q].nom]), { w2: true }) + num(o, "coinLong", "Longueur du coin (gauche ↔ droite)", "m") + num(o, "coinLarg", "Largeur du coin (avant ↔ fond)", "m") + "</div>";
+  }
+  h += '<div class="grid" style="margin-top:8px">' + num(o, "x", "Centre x", "m") + num(o, "y", "Centre y", "m") + "</div>";
+  h += '<label class="chk"><input type="checkbox" data-k="plafond" data-type="chk"' + (o.plafond ? " checked" : "") + "> Plafond (affiché avec le calque « Plafond »)</label>";
+  h += info([["Surface", fr(S, 1) + " m²"], ["Volume", fr(S * o.H, 1) + " m³"]]);
+  h += '<p class="hint">Faites glisser le local : près d\'un autre, il se colle contre lui ou s\'aligne sur ses bords. R le tourne d\'un quart de tour (le coin du L suit). Les portes posées sur ses murs le suivent ; les cotes s\'accrochent à ses angles.</p></div>';
   return h + actions("locaux", o);
 }
 
@@ -326,7 +339,7 @@ export function resumeObjet(liste, o) {
   if (liste === "cloisons") { return "L " + fr(Math.hypot(o.x1 - o.x0, o.y1 - o.y0), 2) + " m" + (o.zh != null || o.zb > 0 ? " · partielle" : "") + (o.porte ? " · porte" + (o.porteOuverte ? " ouverte" : " fermée") : ""); }
   if (liste === "obstacles") return fr(o.L, 2) + " × " + fr(o.l, 2) + " × " + fr(o.h, 2) + " m" + (o.poreux > 0.01 ? " · ajouré" : "");
   if (liste === "personnes") return fr(o.taille, 2) + " m";
-  if (liste === "locaux") return fr(o.L, 1) + " × " + fr(o.l, 1) + " × " + fr(o.H, 1) + " m · " + (o.T > 0 ? "+" : "") + fr(o.T, 0) + " °C";
+  if (liste === "locaux") return (o.forme === "L" ? "En L · " : "") + fr(localSurface(o), 0) + " m² · h " + fr(o.H, 1) + " m · " + (o.T > 0 ? "+" : "") + fr(o.T, 0) + " °C";
   if (liste === "pieces") return fr(o.L, 2) + " × " + fr(o.l, 2) + " m · " + (o.T > 0 ? "+" : "") + fr(o.T, 0) + " °C";
   if (liste === "deflecteurs") return "R " + fr(o.rayon, 2) + " m · L " + fr(o.longueur, 2) + " m · " + (o.angle === "sol" ? "sol" : "plafond");
   return fr(o.w, 2) + " × " + fr(o.h, 2) + " m";

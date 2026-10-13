@@ -241,18 +241,42 @@ check("déplacement au clavier", await page.evaluate(x => Math.abs(MF.projet().e
 // Bâtiment : exemple agroalimentaire, outils de flux masqués, local ajouté, retour au projet de chambre
 const idChambre = await page.evaluate(() => MF.store.idCourant());
 await page.click("#bProjets"); await page.click("#projBatimentEx");
-check("bâtiment : exemple chargé (hall, 3 locaux, quai)", await page.evaluate(() => { const p = MF.projet(); return p.type === "batiment" && p.locaux.length === 3 && p.pieces[0].nom === "Quai"; }));
+check("bâtiment : exemple chargé (5 locaux collés, bureaux en L)", await page.evaluate(() => { const p = MF.projet(); return p.type === "batiment" && p.locaux.length === 5 && p.locaux[3].forme === "L"; }));
 check("bâtiment : outils de flux masqués", await page.isHidden("#bCalcul") && await page.isHidden('[data-aff="particules"]') && await page.isHidden(".leg") && await page.isVisible("#bCote"));
-check("bâtiment : listes locaux et machines, pas d'évaporateurs", await page.isVisible('[data-ajout="locaux"]') && await page.isHidden('[data-ajout="evaps"]') && /Machines/.test(await page.textContent("#listes")));
+check("bâtiment : listes locaux et machines, pas d'évaporateurs ni d'enveloppe", await page.isVisible('[data-ajout="locaux"]') && await page.isHidden('[data-ajout="evaps"]') && /Machines/.test(await page.textContent("#listes")) && /5 locaux/.test(await page.textContent("#chInfo")));
 check("bâtiment : étiquettes des locaux", /Bureaux · \+20 °C/.test(await page.textContent(".vue3d-etiquettes")));
-await page.click('[data-ajout="locaux"]');
-await page.fill("#f_L", "10"); await page.press("#f_L", "Enter");
-check("bâtiment : local ajouté et dimensionné", await page.evaluate(() => MF.projet().locaux.length === 4 && MF.projet().locaux[3].L === 10));
-await page.click('[data-tab="res"]');
-check("bâtiment : récapitulatif des surfaces", /Récapitulatif/.test(await page.textContent("#pane-res")) && /Hall \(enveloppe\)/.test(await page.textContent("#pane-res")) && (await page.textContent('[data-tab="res"]')) === "Récapitulatif");
-check("bâtiment : pas de calcul des flux lancé", await page.evaluate(() => !MF.calculs.enCours()));
-await page.waitForTimeout(400);
 await page.screenshot({ path: path.join(SHOTS, "4b-batiment.png") });
+// Nouveau local : posé à droite du bâtiment, puis glissé à la souris contre les vestiaires (aimantation)
+await page.click('[data-ajout="locaux"]');
+const nv = await page.evaluate(() => MF.projet().locaux[5]);
+check("bâtiment : local ajouté collé à droite du bâtiment", Math.abs(nv.x - nv.L / 2 - 46) < 1e-6, JSON.stringify([nv.x, nv.y]));
+await page.click('[data-vue="dessus"]'); await page.waitForTimeout(700);
+const de = await page.evaluate(id => { const o = MF.projet().locaux.find(x => x.id === id); return MF.vue.ecran([o.x, o.y, 0.01]); }, nv.id);
+// Sous les bureaux, contre le quai : bord gauche à 0,2 m du quai (x = 30), bord du fond à 0,15 m des bureaux (y = 8)
+const vers = await page.evaluate(() => MF.vue.ecran([30.2 + 4, 7.85 - 3, 0.01]));
+await page.mouse.move(de.x, de.y); await page.mouse.down();
+for (let i = 1; i <= 10; i++) await page.mouse.move(de.x + (vers.x - de.x) * i / 10, de.y + (vers.y - de.y) * i / 10);
+await page.mouse.up();
+const colle = await page.evaluate(id => MF.projet().locaux.find(x => x.id === id), nv.id);
+check("bâtiment : local glissé, collé contre le quai et les bureaux (aimantation)", Math.abs(colle.x - 34) < 1e-6 && Math.abs(colle.y - 5) < 1e-6, JSON.stringify([colle.x, colle.y]));
+// En L
+await page.selectOption("#f_forme", "L");
+check("bâtiment : local passé en L", await page.evaluate(id => MF.projet().locaux.find(x => x.id === id).forme === "L", nv.id) && await page.isVisible("#f_coinLong"));
+// Machine hors des locaux
+await page.click('[data-ajout="obstacles"]');
+const mac = await page.evaluate(() => { const p = MF.projet(), m = p.obstacles[p.obstacles.length - 1];
+  return { x: m.x, y: m.y, nom: m.nom, dehors: p.locaux.every(o => Math.abs(m.x - o.x) > o.L / 2 || Math.abs(m.y - o.y) > o.l / 2) }; });
+check("bâtiment : machine posée hors des locaux (non ramenée dedans)", mac.dehors && /^Machine/.test(mac.nom), JSON.stringify(mac));
+// Porte du quai : suit le quai quand il bouge
+const quai = await page.evaluate(() => MF.projet().locaux.find(o => o.nom === "Quai").id);
+await page.click('[data-sel="' + quai + '"]');
+await page.fill("#f_y", "3"); await page.press("#f_y", "Enter");
+check("bâtiment : saisie de la position d'un local", await page.evaluate(id => MF.projet().locaux.find(o => o.id === id).y === 3, quai));
+await page.click('[data-tab="res"]');
+check("bâtiment : récapitulatif des locaux avec total", /Récapitulatif/.test(await page.textContent("#pane-res")) && /Total/.test(await page.textContent("#pane-res")) && (await page.textContent('[data-tab="res"]')) === "Récapitulatif");
+check("bâtiment : pas de calcul des flux lancé", await page.evaluate(() => !MF.calculs.enCours()));
+await page.click('[data-vue="iso"]'); await page.waitForTimeout(600);
+await page.screenshot({ path: path.join(SHOTS, "4c-batiment-locaux.png") });
 // Changement de type depuis le panneau du projet, puis annulation
 await page.click('[data-sel="chambre"]');
 await page.selectOption("#f_projet\\.type", "chambre");

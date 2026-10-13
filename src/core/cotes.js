@@ -1,6 +1,6 @@
 /* Cotes (mesures de longueur point à point) : points d'accroche de la chambre et des objets, mesure.
    Module pur. Une cote est enregistrée dans le projet : { id, a: [x, y, z], b: [x, y, z] }. */
-import { dims, polygone, pieceGeo, personneGeo, localGeo, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteCloison, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "./geometrie.js";
+import { dims, polygone, pieceGeo, personneGeo, localPolygone, mursLocaux, porteSurMurs, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteCloison, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "./geometrie.js";
 
 /* Sommets d'une boîte alignée sur les axes */
 function sommetsBoite(b, nom, out) {
@@ -17,7 +17,7 @@ function sommetsPanneau(x0, y0, x1, y1, ep, zb, zh, nom, out) {
 
 /* Points où une cote peut s'accrocher : coins et milieux des murs, sommets des objets */
 export function pointsAccroche(projet) {
-  const ch = projet.chambre, k = dims(ch), pl = polygone(ch), out = [];
+  const ch = projet.chambre, k = dims(ch), pl = projet.type === "batiment" ? [] : polygone(ch), out = [];
   pl.forEach((A, i) => {
     const B = pl[(i + 1) % pl.length];
     for (const z of [0, k.H]) {
@@ -42,13 +42,15 @@ export function pointsAccroche(projet) {
     if (po) for (const t of [po.t0, po.t1]) for (const z of [po.zb, po.zh]) out.push({ p: [c.x0 + g.ux * t, c.y0 + g.uy * t, z], nom: c.nom + " · porte" });
   });
   projet.obstacles.forEach(o => sommetsBoite(obstacleGeo(o).box, o.nom, out));
+  const batiment = projet.type === "batiment", murs = batiment ? mursLocaux(projet.locaux) : null;
   projet.portes.forEach(d => {
-    const s = porteSnap(ch, d), h = Math.min(d.h, k.H);
+    const s = batiment ? porteSurMurs(murs, d) : porteSnap(ch, d); if (!s) return;
+    const h = Math.min(d.h, batiment ? s.H : k.H);
     for (const sg of [-1, 1]) for (const z of [0, h]) out.push({ p: [s.x + sg * s.ex * s.w / 2, s.y + sg * s.ey * s.w / 2, z], nom: d.nom });
   });
   projet.deflecteurs.forEach(o => sommetsBoite(deflecteurGeo(o, ch).box, o.nom, out));
   (projet.pieces || []).forEach(o => sommetsBoite(pieceGeo(o).box, o.nom, out));
-  (projet.locaux || []).forEach(o => sommetsBoite(localGeo(o).box, o.nom, out));
+  (projet.locaux || []).forEach(o => localPolygone(o).forEach(([x, y]) => { out.push({ p: [x, y, 0], nom: o.nom }); out.push({ p: [x, y, o.H], nom: o.nom }); }));
   (projet.personnes || []).forEach(o => { out.push({ p: [o.x, o.y, o.taille], nom: o.nom + " · haut de la tête" }); out.push({ p: [o.x, o.y, 0], nom: o.nom + " · pieds" }); });
   return out;
 }

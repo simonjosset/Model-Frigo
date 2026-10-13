@@ -30,7 +30,7 @@ export const DECOR = ["pieces", "personnes", "locaux"];
 export const TYPES_PROJET = { chambre: "Chambre froide", batiment: "Bâtiment" };
 export const LISTES_PROJET = {
   chambre: ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces", "personnes"],
-  batiment: ["locaux", "obstacles", "portes", "pieces", "personnes"]
+  batiment: ["locaux", "obstacles", "portes", "personnes"]
 };
 
 export const MAILLES = {
@@ -82,7 +82,7 @@ export function personneDefaut(ch) {
 }
 /* Local à l'intérieur du bâtiment (bureaux, local technique, vestiaires…) : murs, plafond, température */
 export function localDefaut(ch) {
-  return { x: Math.min(4, ch.longueur / 2), y: Math.min(3, ch.largeur / 2), L: Math.min(8, ch.longueur), l: Math.min(6, ch.largeur), H: Math.min(3, ch.H), T: 20, plafond: true };
+  return { x: 4, y: 3, L: 8, l: 6, H: 3, T: 20, plafond: true, forme: "rect", coin: "arriere-droit", coinLong: 3, coinLarg: 3 };
 }
 const DEFAUTS = { evaps: evapDefaut, echelles: echellesDefaut, cloisons: cloisonDefaut, obstacles: obstacleDefaut, portes: porteDefaut, deflecteurs: deflecteurDefaut, pieces: pieceDefaut, personnes: personneDefaut, locaux: localDefaut };
 
@@ -109,31 +109,35 @@ export function projetVisible(p) {
   return q;
 }
 
-/* Bâtiment d'exemple : hall agroalimentaire avec locaux, lignes, quai (nom de code uniquement) */
+/* Bâtiment d'exemple : locaux collés (atelier agroalimentaire, quai, bureaux en L…), machines dedans et dehors.
+   Nom de code uniquement. En bâtiment, la « chambre » n'est pas utilisée : ce sont les locaux qui font le bâtiment. */
 export function batimentExemple() {
-  const ch = Object.assign(chambreDefaut(), { longueur: 48, largeur: 30, H: 8, Ti: 12 });
   const p = {
     format: FORMAT, version: VERSION, type: "batiment", nom: "Projet Bêta", maj: Date.now(),
-    chambre: ch, reglages: reglagesDefaut(),
+    chambre: chambreDefaut(), reglages: reglagesDefaut(),
     evaps: [], echelles: [], cloisons: [], obstacles: [], portes: [], deflecteurs: [], pieces: [], personnes: [], locaux: [], cotes: []
   };
-  ajouter(p, "locaux", { nom: "Local technique", x: 4, y: 26, L: 8, l: 8, H: 4, T: 20 });
-  ajouter(p, "locaux", { nom: "Bureaux", x: 14, y: 27, L: 12, l: 6, H: 3, T: 20 });
-  ajouter(p, "locaux", { nom: "Vestiaires", x: 25, y: 27, L: 10, l: 6, H: 3, T: 20 });
-  ajouter(p, "obstacles", { nom: "Ligne 1", x: 20, y: 14, L: 16, l: 2, h: 1.8 });
-  ajouter(p, "obstacles", { nom: "Ligne 2", x: 20, y: 8, L: 16, l: 2, h: 1.8 });
-  ajouter(p, "portes", { nom: "Porte quai 1", x: 34, y: 0, w: 3, h: 4 });
-  ajouter(p, "portes", { nom: "Porte quai 2", x: 42, y: 0, w: 3, h: 4 });
-  ajouter(p, "pieces", { nom: "Quai", x: 24, y: -4, L: 48, l: 8, H: 6, T: 5 });
-  ajouter(p, "personnes", { x: 10, y: 10 });
+  ajouter(p, "locaux", { nom: "Atelier de production", x: 15, y: 18, L: 30, l: 20, H: 6, T: 12 });
+  ajouter(p, "locaux", { nom: "Quai", x: 15, y: 4, L: 30, l: 8, H: 5, T: 5 });
+  ajouter(p, "locaux", { nom: "Local technique", x: 34, y: 24, L: 8, l: 8, H: 4, T: 20 });
+  ajouter(p, "locaux", { nom: "Bureaux", x: 36, y: 14, L: 12, l: 12, H: 3, T: 20, forme: "L", coin: "arriere-droit", coinLong: 4, coinLarg: 4 });
+  ajouter(p, "locaux", { nom: "Vestiaires", x: 42, y: 24, L: 8, l: 8, H: 3, T: 20 });
+  ajouter(p, "obstacles", { nom: "Ligne 1", x: 15, y: 14, L: 16, l: 2, h: 1.8 });
+  ajouter(p, "obstacles", { nom: "Ligne 2", x: 15, y: 21, L: 16, l: 2, h: 1.8 });
+  ajouter(p, "obstacles", { nom: "Groupe froid", x: 48, y: 11, L: 4, l: 2, h: 2 });
+  ajouter(p, "portes", { nom: "Porte quai 1", x: 8, y: 0, w: 3, h: 4 });
+  ajouter(p, "portes", { nom: "Porte quai 2", x: 20, y: 0, w: 3, h: 4 });
+  ajouter(p, "portes", { nom: "Porte atelier", x: 15, y: 8, w: 2.5, h: 3.5 });
+  ajouter(p, "personnes", { x: 10, y: 11 });
   return p;
 }
-/* Bâtiment vide : un hall de 40 × 25 × 8 m */
+/* Bâtiment vide : un premier local de 20 × 15 × 6 m */
 export function batimentVide(nom) {
   const p = batimentExemple();
-  p.nom = nom || "Bâtiment"; p.chambre = Object.assign(chambreDefaut(), { longueur: 40, largeur: 25, H: 8, Ti: 15 });
+  p.nom = nom || "Bâtiment";
   LISTES.forEach(l => { p[l] = []; });
-  ajouter(p, "personnes", { x: 5, y: 5 });
+  ajouter(p, "locaux", { nom: "Local 1", x: 10, y: 7.5, L: 20, l: 15, H: 6, T: 15 });
+  ajouter(p, "personnes", { x: 3, y: 3 });
   return p;
 }
 
@@ -225,6 +229,9 @@ export function normaliserObjet(liste, o, ch) {
   } else if (liste === "locaux") {
     r.x = n(r.x, d.x); r.y = n(r.y, d.y); r.L = n(r.L, d.L, 0.5, 300); r.l = n(r.l, d.l, 0.5, 300);
     r.H = n(r.H, d.H, 1, 30); r.T = n(r.T, d.T, -60, 60); r.plafond = r.plafond !== false;
+    // En L : le rectangle moins un coin, comme la chambre
+    r.forme = r.forme === "L" ? "L" : "rect"; r.coin = COINS[r.coin] ? r.coin : "arriere-droit";
+    r.coinLong = n(r.coinLong, 3, 0.1, Math.max(0.1, r.L - 0.3)); r.coinLarg = n(r.coinLarg, 3, 0.1, Math.max(0.1, r.l - 0.3));
   } else if (liste === "personnes") {
     r.x = n(r.x, d.x); r.y = n(r.y, d.y); r.dir = angle(r.dir); r.taille = n(r.taille, 1.75, 0.5, 2.3);
   }

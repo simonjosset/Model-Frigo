@@ -6,7 +6,7 @@ import {
   MeshLambertMaterial, MeshBasicMaterial, LineBasicMaterial, LineSegments, InstancedMesh, Object3D, Plane, DoubleSide, MOUSE, TOUCH, EdgesGeometry, Box3, TubeGeometry, QuadraticBezierCurve3
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { dims, polygone, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo, etirerRetombee, porteCloison, pieceGeo, localGeo, EP_LOCAL } from "../core/geometrie.js";
+import { dims, polygone, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo, etirerRetombee, porteCloison, pieceGeo, localGeo, localPolygone, mursLocaux, porteSurMurs, emprise } from "../core/geometrie.js";
 import { projetVisible, LISTES_PROJET } from "../core/modele.js";
 import { pointsAccroche, mesure } from "../core/cotes.js";
 import { produitsLocaux, ROUES } from "../core/produits.js";
@@ -45,7 +45,7 @@ export function creerVue(conteneur, cb) {
 
   let projet = null, theme = { fond: 0x0b1739, accent: 0xcb3cff, sombre: true }, selId = null;
   const racine = new Group(); scene.add(racine);
-  let murs = [], plafond = null, objets = {}, pickables = [], selBox = null, poignees = [];
+  let murs = [], mursLoc = [], plafondsLoc = [], plafond = null, objets = {}, pickables = [], selBox = null, poignees = [];
   const aff = { murs: true, plafond: false, etiquettes: true, couleurProduits: false, pieces: true };
   const flux = creerFlux(scene, { demander: () => demander() });
   let vitEchelles = null; // vitesses par chariot (analyse) pour colorer les produits
@@ -108,8 +108,8 @@ export function creerVue(conteneur, cb) {
     M.poignee = new MeshBasicMaterial({ color: theme.accent });
     M.pieceMur = new MeshLambertMaterial({ color: s ? 0x8fa3d1 : 0x9aa8c8, transparent: true, opacity: s ? 0.06 : 0.1, side: DoubleSide, depthWrite: false });
     M.pieceTrait = new LineBasicMaterial({ color: s ? 0x6f86c0 : 0x7f8db0, transparent: true, opacity: 0.55 });
-    M.localMur = new MeshLambertMaterial({ color: s ? 0xb9c3d8 : 0xd5dae4, transparent: true, opacity: 0.55, depthWrite: false });
-    M.localPlafond = new MeshLambertMaterial({ color: s ? 0xb9c3d8 : 0xd5dae4, transparent: true, opacity: 0.16, depthWrite: false });
+    M.localMur = new MeshLambertMaterial({ color: s ? 0xb9c3d8 : 0xc9cfdb, transparent: true, opacity: s ? 0.42 : 0.5, depthWrite: false, side: DoubleSide });
+    M.localPlafond = new MeshLambertMaterial({ color: s ? 0xb9c3d8 : 0xd5dae4, transparent: true, opacity: 0.2, depthWrite: false, side: DoubleSide });
     M.gilet = new MeshLambertMaterial({ color: 0xff8a2a });
     M.pantalon = new MeshLambertMaterial({ color: 0x34405e });
     M.peau = new MeshLambertMaterial({ color: 0xe8c2a0 });
@@ -129,9 +129,22 @@ export function creerVue(conteneur, cb) {
 
   /* ---------- Chambre ---------- */
   let chambre = null;
+  /* Bâtiment : pas d'enveloppe, un sol quadrillé sous l'emprise de tous les locaux et machines */
+  function construireSolBatiment() {
+    const b = emprise(projetVisible(projet)), m = 4;
+    const x0 = Math.floor(b.x0 - m), x1 = Math.ceil(b.x1 + m), y0 = Math.floor(b.y0 - m), y1 = Math.ceil(b.y1 + m);
+    const sol = boite(x1 - x0, y1 - y0, 0.02, M.sol, (x0 + x1) / 2, (y0 + y1) / 2, -0.014); sol.userData.sol = true; chambre.add(sol);
+    const g = [];
+    for (let x = x0; x <= x1; x++) g.push(x, y0, 0, x, y1, 0);
+    for (let y = y0; y <= y1; y++) g.push(x0, y, 0, x1, y, 0);
+    const gg = new BufferGeometry(); gg.setAttribute("position", new Float32BufferAttribute(g, 3));
+    chambre.add(new LineSegments(gg, M.grille));
+    plafond = null;
+  }
   function construireChambre() {
     if (chambre) vider(chambre);
     chambre = new Group(); racine.add(chambre); murs = [];
+    if (projet.type === "batiment") { construireSolBatiment(); return; }
     const k = dims(projet.chambre), pl = polygone(projet.chambre), H = k.H;
     const forme = new Shape(); pl.forEach((p, i) => i ? forme.lineTo(p[0], p[1]) : forme.moveTo(p[0], p[1]));
     const sol = new Mesh(new ShapeGeometry(forme), M.sol); sol.position.z = -0.002; sol.userData.sol = true; chambre.add(sol);
@@ -168,10 +181,11 @@ export function creerVue(conteneur, cb) {
   function majMurs() {
     if (!projet) return;
     const c = camera.position;
-    murs.forEach(m => {
+    murs.concat(mursLoc).forEach(m => {
       const n = m.userData.n, p = m.userData.p;
       m.visible = aff.murs && ((c.x - p[0]) * n[0] + (c.y - p[1]) * n[1] < 0);
     });
+    plafondsLoc.forEach(m => { m.visible = aff.plafond; });
     if (plafond) plafond.visible = aff.plafond && c.z < dims(projet.chambre).H;
   }
 
@@ -322,7 +336,7 @@ export function creerVue(conteneur, cb) {
     return g;
   }
   function construirePorte(d) {
-    const g = new Group(), s = porteSnap(projet.chambre, d), w = s.w, h = Math.min(d.h, dims(projet.chambre).H);
+    const g = new Group(), s = snapPorte(d), w = s.w, h = Math.min(d.h, s.H || d.h);
     const off = -0.012, x0 = s.x - s.ex * w / 2 + s.nx * off, y0 = s.y - s.ey * w / 2 + s.ny * off, x1 = s.x + s.ex * w / 2 + s.nx * off, y1 = s.y + s.ey * w / 2 + s.ny * off;
     const geo = new BufferGeometry();
     geo.setAttribute("position", new Float32BufferAttribute([x0, y0, 0, x1, y1, 0, x1, y1, h, x0, y0, 0, x1, y1, h, x0, y0, h], 3));
@@ -331,6 +345,11 @@ export function creerVue(conteneur, cb) {
     const cadre = new BufferGeometry(); cadre.setAttribute("position", new Float32BufferAttribute([x0, y0, 0, x0, y0, h, x0, y0, h, x1, y1, h, x1, y1, h, x1, y1, 0], 3));
     g.add(new LineSegments(cadre, new LineBasicMaterial({ color: 0xffb27a })));
     return g;
+  }
+  /* Porte posée sur le mur le plus proche : de la chambre, ou des locaux en bâtiment */
+  function snapPorte(d) {
+    if (projet.type !== "batiment") return porteSnap(projet.chambre, d);
+    return porteSurMurs(mursLocaux(projet.locaux), d) || { x: d.x, y: d.y, ex: 1, ey: 0, nx: 0, ny: -1, w: d.w, H: d.h };
   }
   /* Déflecteur d'angle : bande cintrée en quart de cercle, du plafond (ou du sol) jusqu'au mur */
   function construireDeflecteur(o) {
@@ -377,23 +396,35 @@ export function creerVue(conteneur, cb) {
     g.add(h);
     return g;
   }
-  /* Local dans le bâtiment : quatre murs, plafond translucide, sol teinté selon la température */
+  /* Local du bâtiment (rectangle ou L) : sol teinté selon la température, murs masqués côté caméra
+     comme ceux de la chambre, plafond affiché avec le calque « Plafond » */
   function construireLocal(o) {
-    const g = new Group(), b = localGeo(o).box, L = b.x1 - b.x0, l = b.y1 - b.y0, H = b.z1, e = EP_LOCAL;
-    const sol = new Mesh(new BoxGeometry(L, l, 0.02), new MeshLambertMaterial({ color: couleurTemperature(o.T), transparent: true, opacity: 0.32, depthWrite: false }));
-    sol.position.set(o.x, o.y, 0.006); g.add(sol);
-    const mur = (sx, sy, x, y) => {
-      const m = boite(sx, sy, H, M.localMur, x, y, H / 2); m.userData.decor = true; g.add(m);
-      const ed = new LineSegments(new EdgesGeometry(m.geometry), M.trait); ed.position.copy(m.position); g.add(ed);
-    };
-    mur(L, e, o.x, b.y0 + e / 2); mur(L, e, o.x, b.y1 - e / 2); mur(e, l - 2 * e, b.x0 + e / 2, o.y); mur(e, l - 2 * e, b.x1 - e / 2, o.y);
-    if (o.plafond) { const p = boite(L, l, 0.04, M.localPlafond, o.x, o.y, H - 0.02); p.userData.decor = true; g.add(p); }
+    const g = new Group(), pl = localPolygone(o), H = o.H;
+    const forme = new Shape(); pl.forEach((q, i) => i ? forme.lineTo(q[0], q[1]) : forme.moveTo(q[0], q[1]));
+    const sol = new Mesh(new ShapeGeometry(forme), new MeshLambertMaterial({ color: couleurTemperature(o.T), transparent: true, opacity: 0.38, depthWrite: false, side: DoubleSide }));
+    sol.position.z = 0.006; g.add(sol);
+    const tr = [];
+    pl.forEach((A, i) => {
+      const B = pl[(i + 1) % pl.length], ex = B[0] - A[0], ey = B[1] - A[1], L = Math.hypot(ex, ey) || 1e-9;
+      const geo = new BufferGeometry();
+      geo.setAttribute("position", new Float32BufferAttribute([A[0], A[1], 0, B[0], B[1], 0, B[0], B[1], H, A[0], A[1], 0, B[0], B[1], H, A[0], A[1], H], 3));
+      geo.computeVertexNormals();
+      const m = new Mesh(geo, M.localMur); m.userData.decor = true; m.userData.n = [ey / L, -ex / L]; m.userData.p = [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2];
+      g.add(m); mursLoc.push(m);
+      tr.push(A[0], A[1], 0, B[0], B[1], 0, A[0], A[1], H, B[0], B[1], H, A[0], A[1], 0, A[0], A[1], H);
+    });
+    const tg = new BufferGeometry(); tg.setAttribute("position", new Float32BufferAttribute(tr, 3)); g.add(new LineSegments(tg, M.trait));
+    if (o.plafond) { const p = new Mesh(new ShapeGeometry(forme), M.localPlafond); p.position.z = H; p.userData.decor = true; p.visible = aff.plafond; g.add(p); plafondsLoc.push(p); }
     return g;
   }
   const CONSTR = { evaps: construireEvap, echelles: construireEchelles, cloisons: construireCloison, obstacles: construireObstacle, portes: construirePorte, deflecteurs: construireDeflecteur, pieces: construirePiece, personnes: construirePersonne, locaux: construireLocal };
 
   function construireObjet(liste, o) {
-    if (objets[o.id]) vider(objets[o.id]);
+    if (objets[o.id]) {
+      const anc = objets[o.id];
+      mursLoc = mursLoc.filter(m => m.parent !== anc); plafondsLoc = plafondsLoc.filter(m => m.parent !== anc);
+      vider(anc);
+    }
     const g = CONSTR[liste](o);
     g.userData.id = o.id; g.userData.liste = liste;
     racine.add(g); objets[o.id] = g;
@@ -469,7 +500,7 @@ export function creerVue(conteneur, cb) {
   let anim = null;
   function vue(nom, immediat) {
     if (!projet) return;
-    const k = dims(projet.chambre), bb = { x0: 0, x1: k.W, y0: 0, y1: k.B, H: k.H };
+    const k = dims(projet.chambre), bb = projet.type === "batiment" ? emprise(projetVisible(projet)) : { x0: 0, x1: k.W, y0: 0, y1: k.B, H: k.H };
     // Cadrage : la chambre et les pièces voisines affichées
     if (aff.pieces) (projet.pieces || []).forEach(o => { const b = pieceGeo(o).box; bb.x0 = Math.min(bb.x0, b.x0); bb.x1 = Math.max(bb.x1, b.x1); bb.y0 = Math.min(bb.y0, b.y0); bb.y1 = Math.max(bb.y1, b.y1); bb.H = Math.max(bb.H, b.z1); });
     const ctr = new Vector3((bb.x0 + bb.x1) / 2, (bb.y0 + bb.y1) / 2, bb.H * 0.35);
@@ -671,7 +702,7 @@ export function creerVue(conteneur, cb) {
     setProjet(p, garder) {
       const premier = !projet;
       projet = p;
-      Object.values(objets).forEach(vider); objets = {};
+      Object.values(objets).forEach(vider); objets = {}; mursLoc = []; plafondsLoc = [];
       construireChambre();
       (LISTES_PROJET[p.type] || LISTES_PROJET.chambre).forEach(l => (p[l] || []).forEach(o => construireObjet(l, o)));
       majPickables(); construireEtiquettes(); construireCotes(); majSelection(); colorerProduits();
@@ -681,7 +712,8 @@ export function creerVue(conteneur, cb) {
     },
     /* Reconstruit un seul objet (déplacement) */
     majObjet(liste, o) {
-      construireObjet(liste, o); majPickables(); construireEtiquettes(); majSelection(); colorerProduits(); accroches = null; demander();
+      construireObjet(liste, o);
+      if (projet.type === "batiment") { construireChambre(); if (liste === "locaux") (projet.portes || []).forEach(d => construireObjet("portes", d)); } majPickables(); construireEtiquettes(); majSelection(); colorerProduits(); accroches = null; demander();
     },
     selection(id) { selId = id || null; majSelection(); },
     setCoter, coter: () => coter,

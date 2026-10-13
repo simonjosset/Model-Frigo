@@ -4,7 +4,7 @@ Modélisation 3D d'une chambre froide, de ses évaporateurs et des flux d'air pr
 
 ## Ce que fait l'outil
 
-Deux types de projet : **chambre froide** (flux d'air, décrit ci-dessous) et **bâtiment** (implantation en 3D d'un hall avec ses locaux, machines, portes et pièces voisines, sans calcul des flux ; récapitulatif des surfaces et volumes ; *Projets* → *+ Nouveau bâtiment* ou *+ Exemple bâtiment*, ou type choisi dans le panneau du projet). Les composants de traitement d'air (CTA, plénums, gaines) viendront s'y poser.
+Deux types de projet : **chambre froide** (flux d'air, décrit ci-dessous) et **bâtiment** (implantation en 3D, sans calcul des flux : le bâtiment est fait de **locaux** rectangulaires ou en L qui se collent les uns aux autres quand on les glisse, de **machines** posées dedans ou dehors, de **portes** sur les murs des locaux ; récapitulatif des surfaces et volumes ; *Projets* → *+ Nouveau bâtiment* ou *+ Exemple bâtiment*, ou type choisi dans le panneau du projet). Les composants de traitement d'air (CTA, plénums, gaines) viendront s'y poser.
 
 
 - **Chambre** rectangulaire ou en L (rectangle total moins un coin, choisi sur un plan coté), hauteur sous plafond, portes accrochées aux murs.

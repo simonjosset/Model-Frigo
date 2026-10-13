@@ -1,6 +1,6 @@
 /* Modèle Frigo : contrôleur de l'interface (sélection, édition, annulation, calculs, résultats, projets). */
 import { normaliser, normaliserObjet, normaliserCote, ajouter, dupliquer, trouver, projetExemple, batimentExemple, batimentVide, TYPES, LISTES, LISTES_PROJET, DECOR } from "../core/modele.js";
-import { dims, volume, surface, evapGeo, echellesGeo, garderDedans, collerPiece, murLibre } from "../core/geometrie.js";
+import { dims, volume, surface, evapGeo, echellesGeo, garderDedans as garderDedansChambre, collerPiece, murLibre, localSurface, mursLocaux, porteSurMurs, pivoterLocal, aimanterLocal, emprise, localGeo } from "../core/geometrie.js";
 import { produitDuCatalogue } from "../core/produits.js";
 import { creerStore } from "./store.js";
 import { creerCalculs } from "./calculs.js";
@@ -39,7 +39,7 @@ export function demarrer() {
     try {
       vue = creerVue($("vue3d"), {
         onPick: (id, produit) => { selectionner(id || "chambre"); if (produit) choisirProduit(id, produit.chariot, produit.niveau); },
-        onDrag: (id, v) => deplacer(id, v),
+        onDrag: (id, v) => deplacer(id, v, true),
         onDragFin: () => { glisse = false; const t = trouver(projet, sel); if (!t || DECOR.indexOf(t.liste) < 0) demanderApercu(true); rendreProp(); },
         onSonde: s => afficherSonde(s),
         onCote: (a, b) => { memoriser(); const c = normaliserCote({ a, b }); projet.cotes.push(c); derniereCote = mesure(c.a, c.b); majCotes(); },
@@ -153,11 +153,29 @@ export function demarrer() {
     rendreListes(); rendreProp();
   }
 
-  function deplacer(id, v) {
+  /* Garde un objet en place : dans la chambre ; en bâtiment, rien n'est borné (les portes vont sur les murs des locaux) */
+  function garderDedans(liste, o) {
+    if (!batiment()) { garderDedansChambre(liste, o, projet.chambre); return; }
+    if (liste === "portes") { const s = porteSurMurs(mursLocaux(projet.locaux), o); if (s) { o.x = s.x; o.y = s.y; } }
+  }
+  /* Portes posées sur les murs d'un local (elles le suivent quand il bouge) */
+  function portesDuLocal(id) {
+    const murs = mursLocaux(projet.locaux);
+    return projet.portes.filter(d => { const s = porteSurMurs(murs, d); return s && s.dist < 0.05 && murs[s.mur].local === id; });
+  }
+  function deplacer(id, v, aimant) {
     const t = trouver(projet, id); if (!t) return;
     if (!glisse) { memoriser(); glisse = true; }
+    if (batiment() && t.liste === "locaux") {
+      const o = t.objet, portes = portesDuLocal(o.id), x0 = o.x, y0 = o.y;
+      Object.assign(o, v);
+      if (aimant) Object.assign(o, aimanterLocal(o, projet.locaux, 0.3)); // à la souris : aimantation contre les locaux voisins
+      portes.forEach(d => { d.x += o.x - x0; d.y += o.y - y0; });
+      apresModif({ sansPanneau: true, decor: true });
+      return;
+    }
     Object.assign(t.objet, v);
-    garderDedans(t.liste, t.objet, projet.chambre);
+    garderDedans(t.liste, t.objet);
     apresModif({ objet: t, sansPanneau: true, decor: DECOR.indexOf(t.liste) >= 0 });
   }
 
@@ -167,8 +185,14 @@ export function demarrer() {
     if (liste === "evaps") { v.x = k.W / 2; v.y = 0.5; v.dir = 90; }
     else if (liste === "echelles") { v.x = k.W / 2; v.y = k.B / 2; v.n = 4; v.rangees = 1; }
     else if (liste === "portes") { v.x = k.W * 0.5; v.y = k.B; }
-    else if (liste === "locaux") { v.x = k.W / 2; v.y = k.B / 2; }
-    else if (liste === "obstacles" && batiment()) { v.nom = "Machine " + (projet.obstacles.length + 1); v.x = k.W / 2; v.y = k.B / 2; v.L = 3; v.l = 1.5; v.h = 1.8; }
+    else if (liste === "locaux") {
+      // Collé à droite du local le plus à droite, aligné sur son bord avant
+      const b = projet.locaux.reduce((m, o) => { const x = localGeo(o).box; return !m || x.x1 > m.x1 ? x : m; }, null);
+      Object.assign(v, b ? { x: b.x1 + 4, y: b.y0 + 3 } : { x: 4, y: 3 });
+    }
+    else if (liste === "obstacles" && batiment()) { const b = emprise(projet); v.nom = "Machine " + (projet.obstacles.length + 1); v.x = b.x1 + 3; v.y = (b.y0 + b.y1) / 2; v.L = 3; v.l = 1.5; v.h = 1.8; }
+    else if (liste === "personnes" && batiment()) { const b = emprise(projet); v.x = b.x0 + 2; v.y = b.y0 + 2; }
+    else if (liste === "portes" && batiment()) { const l = projet.locaux.find(o => o.id === sel) || projet.locaux[0]; if (l) { const b = localGeo(l).box; v.x = (b.x0 + b.x1) / 2; v.y = b.y0; } }
     else if (liste === "pieces") Object.assign(v, collerPiece(Object.assign({}, { L: 3, l: 3 }), projet.chambre, murLibre(projet.pieces, projet.chambre)), { H: k.H });
     else if (liste === "deflecteurs") {
       // Sur le mur que vise le soufflage du premier évaporateur
@@ -176,7 +200,7 @@ export function demarrer() {
       if (e) { const g = evapGeo(e, projet.chambre); v.x = Math.min(k.W, Math.max(0, e.x + g.u[0] * 1000)); v.y = Math.min(k.B, Math.max(0, e.y + g.u[1] * 1000)); v.longueur = Math.max(1, e.len + 0.6); }
     }
     const o = ajouter(projet, liste, v);
-    garderDedans(liste, o, projet.chambre);
+    garderDedans(liste, o);
     apresModif({ decor: DECOR.indexOf(liste) >= 0 });
     selectionner(o.id);
   }
@@ -185,13 +209,14 @@ export function demarrer() {
     const t = trouver(projet, sel); if (!t) return;
     memoriser();
     if (nom === "supprimer") { projet[t.liste] = projet[t.liste].filter(o => o.id !== sel); sel = "chambre"; if (vue) vue.selection(null); }
-    else if (nom === "dupliquer") { const o = dupliquer(projet, t.liste, sel); garderDedans(t.liste, o, projet.chambre); sel = o.id; }
+    else if (nom === "dupliquer") { const o = dupliquer(projet, t.liste, sel); garderDedans(t.liste, o); sel = o.id; }
     else if (nom === "masquer") t.objet.off = !t.objet.off;
     else if (nom === "pivoter" && "dir" in t.objet) t.objet.dir = (t.objet.dir + 90) % 360;
-    else if (nom === "pivoter" && (t.liste === "pieces" || t.liste === "locaux")) [t.objet.L, t.objet.l] = [t.objet.l, t.objet.L];
+    else if (nom === "pivoter" && t.liste === "pieces") [t.objet.L, t.objet.l] = [t.objet.l, t.objet.L];
+    else if (nom === "pivoter" && t.liste === "locaux") Object.assign(t.objet, pivoterLocal(t.objet));
     else if (nom.startsWith("coller-") && t.liste === "pieces") Object.assign(t.objet, collerPiece(t.objet, projet.chambre, nom.slice(7)));
-    else if (nom === "pivoter" && t.liste === "cloisons") { const o = t.objet, cx = (o.x0 + o.x1) / 2, cy = (o.y0 + o.y1) / 2; [o.x0, o.y0, o.x1, o.y1] = [cx - (o.y0 - cy), cy + (o.x0 - cx), cx - (o.y1 - cy), cy + (o.x1 - cx)]; garderDedans("cloisons", o, projet.chambre); }
-    if (t.objet && nom === "pivoter") garderDedans(t.liste, t.objet, projet.chambre);
+    else if (nom === "pivoter" && t.liste === "cloisons") { const o = t.objet, cx = (o.x0 + o.x1) / 2, cy = (o.y0 + o.y1) / 2; [o.x0, o.y0, o.x1, o.y1] = [cx - (o.y0 - cy), cy + (o.x0 - cx), cx - (o.y1 - cy), cy + (o.x1 - cx)]; garderDedans("cloisons", o); }
+    if (t.objet && nom === "pivoter") garderDedans(t.liste, t.objet);
     apresModif({ decor: DECOR.indexOf(t.liste) >= 0 });
     if (vue) vue.selection(sel === "chambre" ? null : sel);
   }
@@ -219,7 +244,7 @@ export function demarrer() {
     else if (cle.startsWith("chambre.")) {
       projet.chambre[cle.slice(8)] = v;
       projet = normaliser(projet);
-      LISTES.forEach(l => projet[l].forEach(o => garderDedans(l, o, projet.chambre)));
+      LISTES.forEach(l => projet[l].forEach(o => garderDedans(l, o)));
       majCoupeBornes();
     } else if (cle.startsWith("reglages.")) {
       projet.reglages[cle.slice(9)] = v; projet = normaliser(projet);
@@ -231,9 +256,11 @@ export function demarrer() {
       else o[cle] = v;
       // Double flux : appareil plus profond (batteries des deux côtés)
       if (cle === "type" && v === "double" && o.dep < 0.9) o.dep = 1.0;
+      const portes = batiment() && t.liste === "locaux" ? portesDuLocal(o.id) : [], x0 = o.x, y0 = o.y;
       const n = normaliserObjet(t.liste, o, projet.chambre);
       Object.keys(o).forEach(k => delete o[k]); Object.assign(o, n);
-      garderDedans(t.liste, o, projet.chambre);
+      portes.forEach(d => { d.x += o.x - x0; d.y += o.y - y0; }); // les portes du local le suivent
+      garderDedans(t.liste, o);
       if (DECOR.indexOf(t.liste) >= 0) { apresModif({ decor: true }); return; }
     }
     apresModif();
@@ -244,7 +271,8 @@ export function demarrer() {
   function rendreListes() {
     const k = dims(projet.chambre);
     $("chNom").textContent = batiment() ? "Bâtiment" : "Chambre";
-    $("chInfo").textContent = (k.L ? "En L · " : "") + fr(k.W, 2) + " × " + fr(k.B, 2) + " × " + fr(k.H, 2) + " m";
+    if (batiment()) $("chInfo").textContent = projet.locaux.length + (projet.locaux.length > 1 ? " locaux" : " local") + " · " + fr(projet.locaux.reduce((s, o) => s + localSurface(o), 0), 0) + " m²";
+    else $("chInfo").textContent = (k.L ? "En L · " : "") + fr(k.W, 2) + " × " + fr(k.B, 2) + " × " + fr(k.H, 2) + " m";
     document.querySelector('[data-sel="chambre"]').setAttribute("aria-current", sel === "chambre");
     let h = "";
     LISTES_PROJET[projet.type].forEach(l => {
@@ -262,9 +290,9 @@ export function demarrer() {
   }
   function rendreResume() {
     if (batiment()) {
-      const sL = projet.locaux.reduce((s, o) => s + o.L * o.l, 0);
-      $("resume").innerHTML = "<span>Surface du hall</span><b>" + fr(surface(projet.chambre), 0) + " m²</b><span>Volume du hall</span><b>" + fr(volume(projet.chambre), 0) + " m³</b>" +
-        "<span>Locaux</span><b>" + projet.locaux.length + "</b><span>Surface des locaux</span><b>" + fr(sL, 0) + " m²</b><span>Machines</span><b>" + projet.obstacles.length + "</b>";
+      const sL = projet.locaux.reduce((s, o) => s + localSurface(o), 0), vL = projet.locaux.reduce((s, o) => s + localSurface(o) * o.H, 0);
+      $("resume").innerHTML = "<span>Locaux</span><b>" + projet.locaux.length + "</b><span>Surface</span><b>" + fr(sL, 0) + " m²</b><span>Volume</span><b>" + fr(vL, 0) + " m³</b>" +
+        "<span>Machines</span><b>" + projet.obstacles.length + "</b>";
       return;
     }
     const V = volume(projet.chambre), Q = projet.evaps.filter(e => !e.off).reduce((s, e) => s + e.q, 0);
@@ -325,17 +353,15 @@ export function demarrer() {
     h += '<div class="sec"><h4>Contrôles</h4>' + R.alertes.slice().sort((a, b) => rang(a.niveau) - rang(b.niveau)).map(a => '<button type="button" class="al ' + a.niveau + '"' + (a.id ? ' data-sel="' + a.id + '"' : "") + "><b>" + esc(a.titre) + "</b>" + esc(a.texte) + "</button>").join("") + "</div>";
     el.innerHTML = h;
   }
-  /* Bâtiment : récapitulatif des surfaces et volumes */
+  /* Bâtiment : récapitulatif des surfaces et volumes des locaux */
   function recapBatiment() {
-    const ch = projet.chambre, ligne = (nom, L, l, H, T) => "<tr><td>" + esc(nom) + '</td><td class="n">' + fr(L * l, 1) + '</td><td class="n">' + fr(L * l * H, 0) + '</td><td class="n">' + (T > 0 ? "+" : "") + fr(T, 0) + "</td></tr>";
+    const signe = T => (T > 0 ? "+" : "") + fr(T, 0);
     let h = '<h2>Récapitulatif</h2><p class="sous">Bâtiment · implantation, sans calcul des flux d\'air</p>';
-    h += '<div class="sec"><h4>Volumes</h4><table class="tab-mini"><tr><th>Zone</th><th class="n">m²</th><th class="n">m³</th><th class="n">°C</th></tr>';
-    h += "<tr><td>Hall (enveloppe)</td><td class=\"n\">" + fr(surface(ch), 1) + '</td><td class="n">' + fr(volume(ch), 0) + '</td><td class="n">' + (ch.Ti > 0 ? "+" : "") + fr(ch.Ti, 0) + "</td></tr>";
-    projet.locaux.forEach(o => { h += ligne(o.nom, o.L, o.l, o.H, o.T); });
-    projet.pieces.forEach(o => { h += ligne(o.nom + " (voisine)", o.L, o.l, o.H, o.T); });
-    h += "</table>";
-    if (projet.locaux.length) h += '<p class="hint">Les locaux sont comptés dans le hall : surface du hall hors locaux ≈ ' + fr(surface(ch) - projet.locaux.reduce((s, o) => s + o.L * o.l, 0), 0) + " m².</p>";
-    return h + "</div>";
+    h += '<div class="sec"><h4>Locaux</h4><table class="tab-mini"><tr><th>Local</th><th class="n">m²</th><th class="n">m³</th><th class="n">°C</th></tr>';
+    let sT = 0, vT = 0;
+    projet.locaux.forEach(o => { const S = localSurface(o); sT += S; vT += S * o.H; h += "<tr><td>" + esc(o.nom) + (o.forme === "L" ? " (en L)" : "") + '</td><td class="n">' + fr(S, 1) + '</td><td class="n">' + fr(S * o.H, 0) + '</td><td class="n">' + signe(o.T) + "</td></tr>"; });
+    h += '<tr><td><b>Total</b></td><td class="n"><b>' + fr(sT, 1) + '</b></td><td class="n"><b>' + fr(vT, 0) + "</b></td><td></td></tr></table></div>";
+    return h;
   }
   function rang(n) { return n === "bad" ? 0 : n === "warn" ? 1 : 2; }
 

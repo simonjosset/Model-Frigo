@@ -209,14 +209,18 @@ export function distSegment(x, y, x0, y0, x1, y1) {
 /* ---------- Porte : accrochée au mur le plus proche ---------- */
 export function porteSnap(ch, d) {
   const pl = polygone(ch);
+  return porteSurMurs(pl.map((A, i) => ({ A, B: pl[(i + 1) % pl.length], H: dims(ch).H })), d);
+}
+/* Porte (ou objet de mur) amenée sur le mur le plus proche parmi des segments { A, B } (contours en sens trigonométrique) */
+export function porteSurMurs(segs, d) {
   let best = null;
-  for (let i = 0; i < pl.length; i++) {
-    const A = pl[i], Bp = pl[(i + 1) % pl.length], dx = Bp[0] - A[0], dy = Bp[1] - A[1], L = Math.hypot(dx, dy);
+  for (let i = 0; i < segs.length; i++) {
+    const A = segs[i].A, Bp = segs[i].B, dx = Bp[0] - A[0], dy = Bp[1] - A[1], L = Math.hypot(dx, dy);
     if (L < 0.05) continue;
     const ex = dx / L, ey = dy / L, hw = Math.min(d.w / 2, L / 2);
     const t = Math.min(Math.max((d.x - A[0]) * ex + (d.y - A[1]) * ey, hw), L - hw);
     const px = A[0] + ex * t, py = A[1] + ey * t, dist = Math.hypot(d.x - px, d.y - py);
-    if (!best || dist < best.dist) best = { x: px, y: py, ex, ey, nx: ey, ny: -ex, dist, w: Math.min(d.w, L), mur: i };
+    if (!best || dist < best.dist) best = { x: px, y: py, ex, ey, nx: ey, ny: -ex, dist, w: Math.min(d.w, L), mur: i, H: segs[i].H };
   }
   return best;
 }
@@ -260,10 +264,54 @@ export function personneGeo(o) {
   return { u, box: { x0: o.x - d.hx, x1: o.x + d.hx, y0: o.y - d.hy, y1: o.y + d.hy, z0: 0, z1: o.taille } };
 }
 
-/* ---------- Local dans le bâtiment : rectangle centré en (x, y), L suivant x, l suivant y ---------- */
+/* ---------- Local du bâtiment : rectangle ou L (comme la chambre : coin retiré), centré en (x, y) ---------- */
 export const EP_LOCAL = 0.1;
 export function localGeo(o) {
   return { box: { x0: o.x - o.L / 2, x1: o.x + o.L / 2, y0: o.y - o.l / 2, y1: o.y + o.l / 2, z0: 0, z1: o.H } };
+}
+function localForme(o) { return { forme: o.forme, longueur: o.L, largeur: o.l, H: o.H, coin: o.coin, coinLong: o.coinLong, coinLarg: o.coinLarg }; }
+/* Contour au sol du local, sens trigonométrique */
+export function localPolygone(o) {
+  const x0 = o.x - o.L / 2, y0 = o.y - o.l / 2;
+  return polygone(localForme(o)).map(([x, y]) => [x + x0, y + y0]);
+}
+export function localSurface(o) { return surface(localForme(o)); }
+/* Murs de tous les locaux (pour accrocher les portes) */
+export function mursLocaux(locaux) {
+  const out = [];
+  (locaux || []).forEach(o => { const pl = localPolygone(o); pl.forEach((A, i) => out.push({ A, B: pl[(i + 1) % pl.length], H: o.H, local: o.id })); });
+  return out;
+}
+/* Quart de tour d'un local (sens trigonométrique) : dimensions et coin du L suivent */
+export function pivoterLocal(o) {
+  const c = COINS[o.coin] || COINS["arriere-droit"], cx = 1 - c.cy, cy = c.cx;
+  return { L: o.l, l: o.L, coinLong: o.coinLarg, coinLarg: o.coinLong, coin: Object.keys(COINS).find(k => COINS[k].cx === cx && COINS[k].cy === cy) };
+}
+/* Aimantation : un local glissé près d'un autre se colle contre lui (ou s'aligne sur ses bords) à moins de `tol` */
+export function aimanterLocal(o, autres, tol) {
+  tol = tol == null ? 0.3 : tol;
+  const b = localGeo(o).box;
+  let dx = null, dy = null;
+  const garder = (cur, v) => (Math.abs(v) <= tol && (cur == null || Math.abs(v) < Math.abs(cur)) ? v : cur);
+  (autres || []).forEach(a => {
+    if (a.id === o.id) return;
+    const c = localGeo(a).box;
+    // Seulement les voisins proches (boîtes à moins de tol l'une de l'autre)
+    if (b.x0 > c.x1 + tol || b.x1 < c.x0 - tol || b.y0 > c.y1 + tol || b.y1 < c.y0 - tol) return;
+    [c.x1 - b.x0, c.x0 - b.x1, c.x0 - b.x0, c.x1 - b.x1].forEach(v => { dx = garder(dx, v); });
+    [c.y1 - b.y0, c.y0 - b.y1, c.y0 - b.y0, c.y1 - b.y1].forEach(v => { dy = garder(dy, v); });
+  });
+  const r = q => Math.round(q * 1000) / 1000;
+  return { x: r(o.x + (dx || 0)), y: r(o.y + (dy || 0)) };
+}
+/* Emprise au sol de tout ce qui est posé dans un projet de bâtiment (sol et cadrage de la vue) */
+export function emprise(projet) {
+  const bx = [];
+  (projet.locaux || []).forEach(o => bx.push(localGeo(o).box));
+  (projet.obstacles || []).forEach(o => bx.push(obstacleGeo(o).box));
+  (projet.personnes || []).forEach(o => bx.push(personneGeo(o).box));
+  if (!bx.length) return { x0: 0, y0: 0, x1: 20, y1: 15, H: 4 };
+  return bx.reduce((m, b) => ({ x0: Math.min(m.x0, b.x0), y0: Math.min(m.y0, b.y0), x1: Math.max(m.x1, b.x1), y1: Math.max(m.y1, b.y1), H: Math.max(m.H, b.z1) }), { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity, H: 0 });
 }
 
 /* ---------- Pièce voisine (décor) ---------- */
