@@ -101,11 +101,14 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .ov-calques button{padding:6px 7px}
 .ov-bas{left:12px;right:12px;bottom:12px;justify-content:space-between;align-items:flex-end;pointer-events:none}
 .ov-bas>*{pointer-events:auto}
-.leg{background:var(--glass);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:11.5px;color:var(--muted);min-width:250px}
+.leg{background:var(--glass);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:11.5px;color:var(--muted);min-width:330px}
 .leg .t{display:flex;justify-content:space-between;color:var(--ink);font-weight:600;margin-bottom:6px;gap:12px}
-.leg .g{height:10px;border-radius:3px;background:linear-gradient(90deg,#FF3B4E 0%,#FDB52A 8.3%,#14CA74 20.8%,#00C2FF 50%,#CB3CFF 100%)}
-.leg .e{position:relative;height:14px;margin-top:3px}
-.leg .e span{position:absolute;transform:translateX(-50%);font-variant-numeric:tabular-nums}
+.leg .g{height:10px;border-radius:3px}
+.leg .e{position:relative;height:20px;margin-top:0}
+.leg .e span{position:absolute;top:5px;transform:translateX(-50%);font-variant-numeric:tabular-nums;white-space:nowrap}
+.leg .e span::before{content:"";position:absolute;left:50%;top:-5px;width:1px;height:4px;background:var(--muted)}
+.leg .e span:first-child{transform:none}.leg .e span:first-child::before{left:0}
+.leg .e span:last-child{transform:translateX(-100%)}.leg .e span:last-child::before{left:auto;right:0}
 .coupe{background:var(--glass);border:1px solid var(--line);border-radius:8px;padding:6px 10px;display:flex;align-items:center;gap:10px;font-size:12.5px}
 .coupe input[type=range]{width:200px;accent-color:var(--accent)}
 .coupe b{font-variant-numeric:tabular-nums;min-width:52px}
@@ -273,7 +276,7 @@ dialog::backdrop{background:rgba(3,8,22,.6)}
     <p class="aide" id="aide">Clic : sélectionner · glisser l'objet sélectionné : déplacer (Maj : au centimètre) · glisser ailleurs : tourner · clic droit : décaler · molette : zoom · R : pivoter · Suppr : supprimer</p>
     <div class="prog" id="prog" hidden role="status"><div class="l"><span id="progT">Calcul fin…</span><button type="button" class="b-ghost" id="bStop">Annuler</button></div><div class="tr"><i id="progB"></i></div></div>
     <div class="ov ov-bas">
-      <div class="leg"><div class="t"><span>Vitesse de l'air</span><span id="legMode">Aperçu instantané</span></div><div class="g"></div><div class="e"><span style="left:0%">0</span><span style="left:8.3%">0,1</span><span style="left:20.8%">0,25</span><span style="left:50%">0,6</span><span style="left:100%">1,2 m/s</span></div></div>
+      <div class="leg"><div class="t"><span>Vitesse de l'air (m/s)</span><span id="legMode">Aperçu instantané</span></div><div class="g" id="legGrad"></div><div class="e" id="legEch"></div></div>
       <div class="coupe" id="coupeBar" hidden><span>Coupe</span><div class="mode" role="group" aria-label="Axe de la coupe"><button type="button" data-axe="z" aria-pressed="true">Horiz.</button><button type="button" data-axe="y" aria-pressed="false">Long.</button><button type="button" data-axe="x" aria-pressed="false">Trans.</button></div><input type="range" id="coupePos" min="0" max="1" step="0.01" aria-label="Position de la coupe"><b id="coupeVal"></b></div>
     </div>
     <div class="sonde" id="sonde" hidden></div>

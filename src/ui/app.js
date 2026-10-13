@@ -6,6 +6,7 @@ import { creerStore } from "./store.js";
 import { creerCalculs } from "./calculs.js";
 import { panneauChambre, panneauObjet, panneauReglages, resumeObjet, lireNombre, esc, fr } from "./formulaires.js";
 import { creerVue, webglDisponible } from "../vue3d/vue.js";
+import { PALIERS, GRADUATIONS, VMAX_ECHELLE, positionEchelle } from "../core/champ.js";
 
 const $ = id => document.getElementById(id);
 const COULEURS = { evaps: "#3D7BFF", echelles: "#14CA74", cloisons: "#8F9BB6", obstacles: "#B07D45", portes: "#E07B39", deflecteurs: "#C9A23F" };
@@ -297,6 +298,11 @@ export function demarrer() {
     $("coupePos").max = max.toFixed(2); $("coupePos").step = "0.05"; $("coupePos").value = aff.pos;
     $("coupeVal").textContent = (aff.axe === "z" ? "z = " : aff.axe === "y" ? "y = " : "x = ") + fr(aff.pos, 2) + " m";
   }
+  /* Légende des vitesses : dégradé et graduations, de 0 à 3 m/s */
+  function majLegende() {
+    $("legGrad").style.background = "linear-gradient(90deg," + PALIERS.map(p => "rgb(" + p[1].join(",") + ") " + (positionEchelle(p[0]) * 100).toFixed(1) + "%").join(",") + ")";
+    $("legEch").innerHTML = GRADUATIONS.map(v => '<span style="left:' + (positionEchelle(v) * 100).toFixed(1) + '%">' + (v === VMAX_ECHELLE ? "≥ " : "") + fr(v, v === 0.25 ? 2 : v % 1 ? 1 : 0) + "</span>").join("");
+  }
   function majAffichage() {
     document.querySelectorAll("[data-aff]").forEach(b => b.setAttribute("aria-pressed", !!aff[b.dataset.aff]));
     document.querySelectorAll("[data-axe]").forEach(b => b.setAttribute("aria-pressed", b.dataset.axe === aff.axe));
@@ -442,6 +448,7 @@ export function demarrer() {
   };
 
   /* ---------- Démarrage ---------- */
+  majLegende();
   if (vue) { vue.setProjet(projet, false); }
   majAffichage(); rendreListes(); rendreResume(); rendreProp(); rendreReglages(); majHisto(); majBoutonsCalcul();
   demanderApercu(true);

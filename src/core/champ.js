@@ -53,8 +53,12 @@ export function ligneDeCourant(F, p0, opts) {
   return pts;
 }
 
-/* Échelle de couleurs des vitesses (m/s) : rouge = air immobile … violet = jet */
-export const PALIERS = [[0, [255, 59, 78]], [0.1, [253, 181, 42]], [0.25, [20, 202, 116]], [0.6, [0, 194, 255]], [1.2, [203, 60, 255]]];
+/* Échelle de couleurs des vitesses (m/s) : rouge = air immobile … violet = jet, rose pâle = jet rapide (3 m/s et plus) */
+export const PALIERS = [[0, [255, 59, 78]], [0.1, [253, 181, 42]], [0.25, [20, 202, 116]], [0.6, [0, 194, 255]], [1.2, [203, 60, 255]], [3, [255, 196, 238]]];
+export const VMAX_ECHELLE = 3;
+/* Graduations de la légende ; position sur la barre en racine carrée pour garder lisibles les faibles vitesses */
+export const GRADUATIONS = [0, 0.1, 0.25, 0.5, 1, 1.5, 2, 3];
+export function positionEchelle(v) { return Math.sqrt(Math.min(1, Math.max(0, v / VMAX_ECHELLE))); }
 export function couleur(v, out) {
   out = out || [0, 0, 0];
   if (v <= 0) { const c = PALIERS[0][1]; out[0] = c[0]; out[1] = c[1]; out[2] = c[2]; return out; }
