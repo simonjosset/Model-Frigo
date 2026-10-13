@@ -17,9 +17,10 @@ export const TYPES = {
   cloisons: { seul: "Cloison", plusieurs: "Cloisons", prefixe: "Cloison " },
   obstacles: { seul: "Obstacle", plusieurs: "Obstacles", prefixe: "Obstacle " },
   portes: { seul: "Porte", plusieurs: "Portes", prefixe: "Porte " },
-  deflecteurs: { seul: "Déflecteur d'angle", plusieurs: "Déflecteurs d'angle", prefixe: "Déflecteur " }
+  deflecteurs: { seul: "Déflecteur d'angle", plusieurs: "Déflecteurs d'angle", prefixe: "Déflecteur " },
+  pieces: { seul: "Pièce voisine", plusieurs: "Pièces voisines", prefixe: "Pièce " }
 };
-export const LISTES = ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs"];
+export const LISTES = ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces"];
 
 export const MAILLES = {
   rapide: { nom: "Rapide", cellules: 40000 },
@@ -59,7 +60,12 @@ export function porteDefaut(ch) {
 export function deflecteurDefaut(ch) {
   return { x: ch.longueur / 2, y: 0, longueur: 3, rayon: 0.6, angle: "plafond" };
 }
-const DEFAUTS = { evaps: evapDefaut, echelles: echellesDefaut, cloisons: cloisonDefaut, obstacles: obstacleDefaut, portes: porteDefaut, deflecteurs: deflecteurDefaut };
+/* Pièce voisine (sas, quai, couloir, autre chambre…) : décor autour de la chambre, hors calcul.
+   Rectangle centré en (x, y), L suivant x, l suivant y ; par défaut contre le mur avant. */
+export function pieceDefaut(ch) {
+  return { x: ch.longueur / 2, y: -1.5, L: ch.longueur, l: 3, H: ch.H, T: 5 };
+}
+const DEFAUTS = { evaps: evapDefaut, echelles: echellesDefaut, cloisons: cloisonDefaut, obstacles: obstacleDefaut, portes: porteDefaut, deflecteurs: deflecteurDefaut, pieces: pieceDefaut };
 
 /* Projet d'exemple : chambre de stockage de glaces (nom de code uniquement) */
 export function projetExemple() {
@@ -67,12 +73,13 @@ export function projetExemple() {
   const p = {
     format: FORMAT, version: VERSION, nom: "Projet Alpha", maj: Date.now(),
     chambre: ch, reglages: reglagesDefaut(),
-    evaps: [], echelles: [], cloisons: [], obstacles: [], portes: [], deflecteurs: [], cotes: []
+    evaps: [], echelles: [], cloisons: [], obstacles: [], portes: [], deflecteurs: [], pieces: [], cotes: []
   };
   ajouter(p, "evaps", { x: 4.5, y: 5.8, dir: 270, q: 9000, T: 8, dv: 0.45 });
   const a = ajouter(p, "echelles", { x: 4.2, y: 3.1, n: 7, rangees: 2 });
   a.nom = "Échelles glace";
   ajouter(p, "portes", { x: 7.6, y: 0 });
+  ajouter(p, "pieces", { nom: "Sas", x: 4.5, y: -1.5, L: 9, l: 3, H: 3.6, T: 5 });
   return p;
 }
 
@@ -158,6 +165,9 @@ export function normaliserObjet(liste, o, ch) {
     r.angle = r.angle === "sol" ? "sol" : "plafond";
   } else if (liste === "portes") {
     r.x = n(r.x, d.x); r.y = n(r.y, d.y); r.w = n(r.w, d.w, 0.4, 8); r.h = n(r.h, d.h, 0.5, 8);
+  } else if (liste === "pieces") {
+    r.x = n(r.x, d.x, -500, 500); r.y = n(r.y, d.y, -500, 500); r.L = n(r.L, d.L, 0.5, 300); r.l = n(r.l, d.l, 0.5, 300);
+    r.H = n(r.H, d.H, 1, 30); r.T = n(r.T, d.T, -60, 60);
   }
   return r;
 }

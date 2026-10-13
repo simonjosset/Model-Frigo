@@ -41,6 +41,26 @@ check("aperçu des flux calculé dans le worker", await attendre(page, () => win
 check("projet d'exemple : 14 échelles chargées", (await page.textContent("#resume")).includes("14"));
 await page.screenshot({ path: path.join(SHOTS, "1-exemple.png") });
 
+// Pièces voisines (décor) : le sas du projet d'exemple, une pièce ajoutée contre le mur libre suivant
+check("pièces voisines : sas de l'exemple affiché", await page.evaluate(() => MF.projet().pieces.length === 1) && /Sas · \+5 °C/.test(await page.textContent(".vue3d-etiquettes")));
+await page.evaluate(() => { window.__nApercu = 0; const f = MF.calculs.apercu; MF.calculs.apercu = (...a) => { window.__nApercu++; return f(...a); }; });
+await page.click('[data-ajout="pieces"]');
+const pc = await page.evaluate(() => MF.projet().pieces[1]);
+check("pièce ajoutée contre le fond, sur toute la longueur", pc && pc.y > 6.5 && pc.L === 9, JSON.stringify(pc));
+await page.fill("#f_T", "-20"); await page.press("#f_T", "Enter");
+await page.click('[data-act="coller-gauche"]');
+const pc2 = await page.evaluate(() => MF.projet().pieces[1]);
+check("pièce : température saisie et collée à gauche (3 m de profondeur)", pc2.T === -20 && pc2.x === -1.5 && pc2.L === 3 && pc2.l === 6.5, JSON.stringify(pc2));
+await page.waitForTimeout(300);
+check("pièce : décor, l'aperçu n'est pas recalculé", await page.evaluate(() => window.__nApercu === 0), await page.evaluate(() => window.__nApercu));
+await page.click('[data-vue="iso"]'); await page.waitForTimeout(600);
+await page.screenshot({ path: path.join(SHOTS, "1d-pieces.png") });
+await page.click('[data-aff="pieces"]'); await page.waitForTimeout(200);
+check("calque Pièces : masquées", await page.evaluate(() => !document.querySelector(".etq.pc") || getComputedStyle(document.querySelector(".etq.pc")).display === "none"));
+await page.click('[data-aff="pieces"]');
+for (let i = 0; i < 3; i++) await page.click("#bAnnuler");
+check("annuler : pièce retirée", await page.evaluate(() => MF.projet().pieces.length === 1));
+
 // Cloison ajoutée puis modifiée par le panneau
 await page.click('[data-ajout="cloisons"]');
 check("cloison ajoutée et sélectionnée", await page.evaluate(() => MF.projet().cloisons.length === 1) && (await page.inputValue('#pane-prop h2 input')) === "Cloison 1");
