@@ -1,6 +1,6 @@
 /* Panneaux de propriétés : HTML des formulaires (chambre, objets, réglages) et lecture des saisies. */
 import { CATALOGUE } from "../core/produits.js";
-import { dims, surface, volume, evapGeo, echellesGeo, cloisonGeo, polygone, COINS, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "../core/geometrie.js";
+import { dims, surface, volume, evapGeo, echellesGeo, cloisonGeo, porteCloison, polygone, COINS, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "../core/geometrie.js";
 import { MAILLES } from "../core/modele.js";
 import { couleur } from "../core/champ.js";
 
@@ -121,8 +121,10 @@ function panneauEvap(p, e, R) {
     h += '<div class="grid" style="margin-top:8px">' + sel(e, "retombeeHaut", "Part de", [["auto", "Auto (" + (e.coude ? "plafond" : "sous l'appareil") + ")"], ["plafond", "Plafond"], ["appareil", "Dessous de l'appareil"]], { w2: true }) +
       num(e, "retombeeBas", "Bas de la retombée", "m du sol", { vide: "Auto : " + aff(basA, 2) }) +
       num(e, "retombeeDist", "Position / face de soufflage", "m") +
-      num(e, "retombeeLargeur", "Largeur", "m", { vide: e.retombeeMurs ? "Mur à mur" : "Auto : " + aff(e.len, 2) }) + "<div></div></div>";
+      num(e, "retombeeLargeur", "Largeur", "m", { vide: e.retombeeMurs ? "Mur à mur" : "Auto : " + aff(e.len, 2) }) +
+      (e.retombeeMurs ? "<div></div>" : num(e, "retombeeDecal", "Décalage le long de l'appareil", "m")) + "</div>";
     h += '<label class="chk"><input type="checkbox" data-k="retombeeMurs" data-type="chk"' + (e.retombeeMurs ? " checked" : "") + '> D\'un mur à l\'autre</label>';
+    h += '<p class="hint"><b>À la main :</b> sélectionnez l\'évaporateur et faites glisser les poignées aux deux bouts de la retombée (en bas du panneau) pour régler sa longueur, comme pour une cloison. L\'autre bout reste en place (Maj : au centimètre).</p>';
     h += '<p class="hint">Panneau vertical qui force l\'air à passer à travers les échelles au lieu de revenir à l\'évaporateur par-dessus. Position : 0 = au ras de la face de soufflage, positif vers l\'avant, négatif vers la reprise. Bas en automatique : haut des échelles les plus hautes + 2 cm. Pour être utile, elle doit se trouver entre la sortie du soufflage et la reprise, au-dessus de la rangée d\'échelles. Un jour plus petit qu\'une maille de calcul (10 à 20 cm) est vu comme fermé.' + (rt ? "" : ' <b style="color:var(--yellow)">Retombée nulle : le bas est au-dessus du haut.</b>') + "</p>";
     const ar = R && (R.retombees || []).find(x => x.evap === e.id);
     if (rt) h += info([["Hauteur de la retombée", aff(rt.zh - rt.zb, 2) + " m (de " + aff(rt.zh, 2) + " à " + aff(rt.zb, 2) + " m)"], ["Largeur", aff(Math.hypot(rt.x1 - rt.x0, rt.y1 - rt.y0), 2) + " m"],
@@ -188,7 +190,18 @@ function panneauCloison(p, c) {
   h += '<div class="sec"><h4>Tracé</h4><div class="grid">' + num(c, "x0", "Début x", "m") + num(c, "y0", "Début y", "m") + num(c, "x1", "Fin x", "m") + num(c, "y1", "Fin y", "m") +
     num(c, "ep", "Épaisseur", "cm", { f: 100, dec: 0 }) + "<div></div>" + num(c, "zb", "Bas de la cloison", "m") + num(c, "zh", "Haut de la cloison", "m", { vide: "Plafond" }) + "</div>";
   h += '<p class="hint">Faites glisser la cloison pour la déplacer, ou ses deux poignées pour changer son tracé. Une cloison qui ne monte pas jusqu\'au plafond, ou qui part au-dessus du sol, laisse passer l\'air.</p>';
-  h += info([["Longueur", fr(g.L, 2) + " m"]]) + "</div>" + actions("cloisons", c);
+  h += info([["Longueur", fr(g.L, 2) + " m"]]) + "</div>";
+  h += '<div class="sec"><h4>Porte dans la cloison</h4><label class="chk"><input type="checkbox" data-k="porte" data-type="chk"' + (c.porte ? " checked" : "") + "> Porte dans la cloison</label>";
+  if (c.porte) {
+    const po = porteCloison(c, p.chambre);
+    h += '<div class="grid" style="margin-top:8px">' + num(c, "porteLargeur", "Largeur de passage", "m") + num(c, "porteHauteur", "Hauteur", "m") +
+      num(c, "portePos", "Milieu de la porte", "m du début", { vide: "Au milieu : " + aff(g.L / 2, 2) }) +
+      sel(c, "porteOuverte", "Pour le calcul", [["true", "Ouverte (l'air passe)"], ["false", "Fermée"]]) + "</div>";
+    h += '<p class="hint">Position comptée depuis le début de la cloison (x, y de début). Porte ouverte : l\'air traverse l\'ouverture dans l\'aperçu et le calcul fin ; fermée : elle compte comme la cloison.</p>';
+    if (po) h += info([["Passage", fr(po.t1 - po.t0, 2) + " × " + fr(po.zh - po.zb, 2) + " m"], ["De", fr(po.t0, 2) + " à " + fr(po.t1, 2) + " m du début"]]);
+    else h += '<p class="hint" style="color:var(--yellow)">Porte sans effet : la cloison commence au-dessus de la porte.</p>';
+  }
+  h += "</div>" + actions("cloisons", c);
   return h;
 }
 
@@ -276,7 +289,7 @@ export function panneauReglages(p, a) {
 export function resumeObjet(liste, o) {
   if (liste === "evaps") return fr(o.q, 0) + " m³/h · " + fr(o.T, 0) + " m" + (o.type === "double" ? " · double flux" : "") + (o.coude ? " · coudes ↓" : "") + (o.retombee ? " · retombée" : "");
   if (liste === "echelles") { const g = echellesGeo(o); return g.total + " éch. · " + fr(g.total * g.info.nb, 0) + " produits"; }
-  if (liste === "cloisons") { return "L " + fr(Math.hypot(o.x1 - o.x0, o.y1 - o.y0), 2) + " m" + (o.zh != null || o.zb > 0 ? " · partielle" : ""); }
+  if (liste === "cloisons") { return "L " + fr(Math.hypot(o.x1 - o.x0, o.y1 - o.y0), 2) + " m" + (o.zh != null || o.zb > 0 ? " · partielle" : "") + (o.porte ? " · porte" + (o.porteOuverte ? " ouverte" : " fermée") : ""); }
   if (liste === "obstacles") return fr(o.L, 2) + " × " + fr(o.l, 2) + " × " + fr(o.h, 2) + " m" + (o.poreux > 0.01 ? " · ajouré" : "");
   if (liste === "deflecteurs") return "R " + fr(o.rayon, 2) + " m · L " + fr(o.longueur, 2) + " m · " + (o.angle === "sol" ? "sol" : "plafond");
   return fr(o.w, 2) + " × " + fr(o.h, 2) + " m";

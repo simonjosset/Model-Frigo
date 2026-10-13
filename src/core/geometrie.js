@@ -126,10 +126,37 @@ export function retombeesEvap(e, ch, basAuto) {
       // Jusqu'aux murs de part et d'autre
       const loin = s => { let t = 0; while (t < 200 && dedans(ch, cx + p[0] * (t + 0.02) * s, cy + p[1] * (t + 0.02) * s)) t += 0.02; return t; };
       a = loin(-1); b = loin(1);
-    } else { const L = (e.retombeeLargeur == null ? e.len : e.retombeeLargeur) / 2; a = L; b = L; }
-    out.push({ id: e.id + "-ret" + c.s, nom: e.nom + " · retombée", x0: cx - p[0] * a, y0: cy - p[1] * a, x1: cx + p[0] * b, y1: cy + p[1] * b, ep: EP_RETOMBEE, zb, zh, evap: e.id, haut });
+    } else {
+      // Largeur choisie, centrée sur l'appareil ou décalée le long de son axe (geo.p, même sens des deux côtés)
+      const L = (e.retombeeLargeur == null ? e.len : e.retombeeLargeur) / 2, dc = (e.retombeeDecal || 0) * (p[0] * geo.p[0] + p[1] * geo.p[1]);
+      a = L - dc; b = L + dc;
+    }
+    out.push({ id: e.id + "-ret" + c.s, nom: e.nom + " · retombée", x0: cx - p[0] * a, y0: cy - p[1] * a, x1: cx + p[0] * b, y1: cy + p[1] * b, ep: EP_RETOMBEE, zb, zh, evap: e.id, haut, s: c.s });
   }
   return out;
+}
+
+/* Étirement d'une retombée à la main : le bout `bout` (0 ou 1) de la retombée du côté `s` est amené au plus
+   près du point (x, y), l'autre bout reste en place. Renvoie largeur et décalage, au pas `pas`, bornés aux murs. */
+export const LARGEUR_MIN_RETOMBEE = 0.2;
+export function etirerRetombee(e, ch, basAuto, s, bout, x, y, pas) {
+  const rt = retombeesEvap(Object.assign({}, e, { off: false, retombeeBas: 0 }), ch, basAuto).find(r => r.s === s);
+  if (!rt) return null;
+  const g = evapGeo(e, ch).p, cx = (rt.x0 + rt.x1) / 2, cy = (rt.y0 + rt.y1) / 2;
+  // Repère : abscisse le long de l'axe de l'appareil, origine au droit de son centre
+  const ox = cx - g[0] * ((cx - e.x) * g[0] + (cy - e.y) * g[1]), oy = cy - g[1] * ((cx - e.x) * g[0] + (cy - e.y) * g[1]);
+  const t = (px, py) => (px - ox) * g[0] + (py - oy) * g[1];
+  const fixe = bout ? t(rt.x0, rt.y0) : t(rt.x1, rt.y1);
+  let v = t(x, y);
+  if (pas > 0) v = Math.round(v / pas) * pas;
+  // Bornes : murs de part et d'autre (si l'axe de la retombée est dans la chambre)
+  if (dedans(ch, ox, oy)) {
+    const loin = sg => { let d = 0; while (d < 200 && dedans(ch, ox + g[0] * (d + 0.01) * sg, oy + g[1] * (d + 0.01) * sg)) d += 0.01; return d; };
+    v = Math.min(Math.max(v, -loin(-1)), loin(1));
+  }
+  if (Math.abs(v - fixe) < LARGEUR_MIN_RETOMBEE) v = fixe + (v >= fixe ? 1 : -1) * LARGEUR_MIN_RETOMBEE;
+  const r3 = q => Math.round(q * 1000) / 1000;
+  return { retombeeMurs: false, retombeeLargeur: r3(Math.abs(v - fixe)), retombeeDecal: r3((v + fixe) / 2) };
 }
 
 /* ---------- Groupe d'échelles ---------- */
@@ -159,6 +186,16 @@ export function cloisonGeo(c, ch) {
   const H = dims(ch).H, zh = c.zh == null ? H : Math.min(H, c.zh), zb = Math.min(c.zb, zh - 0.05);
   const dx = c.x1 - c.x0, dy = c.y1 - c.y0, L = Math.hypot(dx, dy) || 1e-9;
   return { L, ux: dx / L, uy: dy / L, ep: c.ep, zb: Math.max(0, zb), zh, pleine: zb <= 0.01 && zh >= H - 0.01 };
+}
+
+/* Porte dans une cloison : de t0 à t1 le long de la cloison (depuis son début), du sol (ou du bas de la
+   cloison) jusqu'à zh. Nulle si la cloison n'a pas de porte ou si elle commence au-dessus de la porte. */
+export function porteCloison(c, ch) {
+  if (!c.porte) return null;
+  const g = cloisonGeo(c, ch), w = Math.min(c.porteLargeur, g.L), zh = Math.min(c.porteHauteur, g.zh);
+  if (zh <= g.zb + 0.01 || w < 0.05) return null;
+  const m = Math.min(Math.max(c.portePos == null ? g.L / 2 : c.portePos, w / 2), g.L - w / 2);
+  return { t0: m - w / 2, t1: m + w / 2, milieu: m, w, zb: g.zb, zh, ouverte: c.porteOuverte !== false, ux: g.ux, uy: g.uy };
 }
 
 /* Distance d'un point au segment d'une cloison (en plan) */

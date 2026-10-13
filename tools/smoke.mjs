@@ -127,6 +127,71 @@ await page.screenshot({ path: path.join(SHOTS, "3d-retombee.png") });
 await page.click("#bAnnuler"); await page.click("#bAnnuler"); await page.click("#bAnnuler");
 check("annuler : coudes retirés", await page.evaluate(() => MF.projet().evaps[0].coude === false));
 
+// Retombée réglée à la main : poignée glissée à la souris, l'autre bout ne bouge pas
+await page.click('[data-sel="' + await page.evaluate(() => MF.projet().evaps[0].id) + '"]');
+await page.check('input[data-k="retombee"]');
+await page.waitForTimeout(300);
+const poi = await page.evaluate(() => MF.vue.poignees());
+check("retombée : deux poignées affichées", poi.length === 2 && poi.every(q => q.q && q.q.retombee === 0), JSON.stringify(poi.map(q => [Math.round(q.x), Math.round(q.y)])));
+const avant = await page.evaluate(() => { const e = MF.projet().evaps[0]; return { L: e.retombeeLargeur, d: e.retombeeDecal }; });
+const tire = poi.slice().sort((a, b) => b.x - a.x)[0];
+await page.mouse.move(tire.x, tire.y); await page.mouse.down();
+for (let i = 1; i <= 8; i++) await page.mouse.move(tire.x + i * 12, tire.y + i * 2);
+await page.mouse.up();
+const apres = await page.evaluate(() => { const e = MF.projet().evaps[0]; return { L: e.retombeeLargeur, d: e.retombeeDecal, m: e.retombeeMurs }; });
+const len0 = await page.evaluate(() => MF.projet().evaps[0].len);
+check("retombée : longueur changée en tirant une poignée", avant.L == null && apres.L > len0 + 0.2 && apres.m === false, JSON.stringify(apres));
+check("retombée : l'autre bout reste en place", Math.abs((apres.d - apres.L / 2) - (0 - len0 / 2)) < 0.03 || Math.abs((apres.d + apres.L / 2) - len0 / 2) < 0.03, JSON.stringify(apres));
+check("retombée : champs largeur et décalage mis à jour", await page.inputValue("#f_retombeeLargeur") !== "" && await page.isVisible("#f_retombeeDecal"));
+await page.screenshot({ path: path.join(SHOTS, "3e-retombee-main.png") });
+await page.click("#bAnnuler"); await page.click("#bAnnuler");
+check("annuler : retombée retirée", await page.evaluate(() => MF.projet().evaps[0].retombee === false && MF.projet().evaps[0].retombeeLargeur == null));
+
+// Cotes : mode cote, accroche aux coins de la chambre, suppression
+await page.click("#bCote");
+check("cote : mode activé", await page.evaluate(() => MF.vue.coter()) && await page.isVisible("#sonde") && /Mode cote/.test(await page.textContent("#sonde")));
+const c0 = await page.evaluate(() => MF.vue.ecran([0, 0, 0])), c1 = await page.evaluate(() => { const k = MF.projet().chambre; return MF.vue.ecran([k.longueur, 0, 0]); });
+await page.mouse.move(c0.x + 6, c0.y - 5);
+check("cote : accroche au coin signalée", /Coin de la chambre/.test(await page.textContent("#sonde")));
+await page.mouse.click(c0.x + 6, c0.y - 5);
+await page.mouse.move(c1.x - 5, c1.y + 4);
+check("cote : longueur affichée pendant la visée", /9,00 m/.test(await page.textContent("#sonde")), (await page.textContent("#sonde")).slice(0, 60));
+await page.mouse.click(c1.x - 5, c1.y + 4);
+const cote = await page.evaluate(() => MF.projet().cotes);
+check("cote : enregistrée entre les deux coins (9,00 m)", cote.length === 1 && cote[0].a.join() === "0,0,0" && cote[0].b.join() === "9,0,0", JSON.stringify(cote));
+check("cote : étiquette dans la 3D", (await page.textContent(".etq.cote")).includes("9,00 m"));
+// Point libre au sol, puis Échap : premier point abandonné
+const mil = await page.evaluate(() => MF.vue.ecran([4.2, 3.1, 0]));
+await page.keyboard.down("Shift"); await page.mouse.click(mil.x, mil.y); await page.keyboard.up("Shift");
+check("cote : premier point libre posé", /second point/.test(await page.textContent("#sonde")));
+await page.keyboard.press("Escape");
+check("cote : Échap abandonne le point en cours", await page.evaluate(() => MF.vue.coter() && MF.projet().cotes.length === 1));
+await page.screenshot({ path: path.join(SHOTS, "3f-cote.png") });
+const png = await Promise.all([page.waitForEvent("download"), page.click("#bPng")]).then(([d]) => d.suggestedFilename());
+check("cote : image PNG avec les cotes", /\.png$/.test(png));
+await page.click(".etq.cote button");
+check("cote : supprimée par sa croix", await page.evaluate(() => MF.projet().cotes.length === 0));
+await page.click("#bAnnuler");
+check("annuler : cote rétablie", await page.evaluate(() => MF.projet().cotes.length === 1));
+await page.keyboard.press("Escape");
+check("cote : Échap quitte le mode", await page.evaluate(() => !MF.vue.coter()) && await page.isHidden("#sonde"));
+await page.click("#bAnnuler"); await page.click("#bAnnuler");
+check("annuler : plus de cote", await page.evaluate(() => MF.projet().cotes.length === 0));
+
+// Porte dans une cloison
+await page.click('[data-sel="' + await page.evaluate(() => MF.projet().cloisons[0].id) + '"]');
+await page.check('input[data-k="porte"]');
+check("cloison : porte ajoutée", await page.evaluate(() => MF.projet().cloisons[0].porte === true) && await page.isVisible("#f_porteLargeur"));
+await page.fill("#f_portePos", "1,5"); await page.press("#f_portePos", "Enter");
+await page.fill("#f_porteLargeur", "1,2"); await page.press("#f_porteLargeur", "Enter");
+check("cloison : position et largeur de la porte", await page.evaluate(() => { const c = MF.projet().cloisons[0]; return c.portePos === 1.5 && c.porteLargeur === 1.2 && c.porteOuverte === true; }));
+await page.waitForTimeout(400);
+await page.screenshot({ path: path.join(SHOTS, "3g-porte-cloison.png") });
+await page.selectOption("#f_porteOuverte", "false");
+check("cloison : porte fermée", await page.evaluate(() => MF.projet().cloisons[0].porteOuverte === false) && /porte fermée/.test(await page.textContent("#listes")));
+for (let i = 0; i < 4; i++) await page.click("#bAnnuler");
+check("annuler : cloison sans porte", await page.evaluate(() => MF.projet().cloisons[0].porte === false));
+
 // Modification après calcul : résultat signalé à relancer
 const idEv = await page.evaluate(() => MF.projet().evaps[0].id);
 await page.click('[data-sel="' + idEv + '"]');

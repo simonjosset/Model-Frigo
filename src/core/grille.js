@@ -1,6 +1,6 @@
 /* Maillage de la chambre en cellules cubiques (ou presque) : parois, évaporateurs, cloisons,
    obstacles pleins, échelles chargées traitées en milieu poreux. Commun à l'aperçu et au calcul fin. */
-import { dims, volume, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, distSegment, dansEncoche, retombeesEvap, basRetombeeAuto, deflecteurGeo, derriereDeflecteur } from "./geometrie.js";
+import { dims, volume, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteCloison, distSegment, dansEncoche, retombeesEvap, basRetombeeAuto, deflecteurGeo, derriereDeflecteur } from "./geometrie.js";
 
 export const SOLIDE = { fluide: 0, paroi: 1, evap: 2, cloison: 3, obstacle: 4, deflecteur: 5 };
 
@@ -49,11 +49,17 @@ export function construireGrille(projet, opts) {
   for (const c of projet.cloisons.concat(G.retombees)) {
     const g = cloisonGeo(c, ch), seuil = Math.max(g.ep / 2, 0.5 * Math.max(dx, dy) * (Math.abs(g.ux) + Math.abs(g.uy)));
     const [k0, k1] = plage(g.zb, g.zh, dz, nz);
+    const po = porteCloison(c, ch), passe = po && po.ouverte ? po : null; // porte ouverte : l'air passe
     const xa = Math.min(c.x0, c.x1) - seuil - dx, xb = Math.max(c.x0, c.x1) + seuil + dx, ya = Math.min(c.y0, c.y1) - seuil - dy, yb = Math.max(c.y0, c.y1) + seuil + dy;
     for (let j = Math.max(0, Math.floor(ya / dy)); j <= Math.min(ny - 1, Math.floor(yb / dy)); j++)
       for (let i = Math.max(0, Math.floor(xa / dx)); i <= Math.min(nx - 1, Math.floor(xb / dx)); i++) {
         if (distSegment((i + 0.5) * dx, (j + 0.5) * dy, c.x0, c.y0, c.x1, c.y1) > seuil + 1e-9) continue;
-        for (let kk = k0; kk <= k1; kk++) if (!solide[id(i, j, kk)]) solide[id(i, j, kk)] = SOLIDE.cloison;
+        const t = passe ? ((i + 0.5) * dx - c.x0) * g.ux + ((j + 0.5) * dy - c.y0) * g.uy : -1;
+        const dansPorte = passe && t >= passe.t0 && t <= passe.t1;
+        for (let kk = k0; kk <= k1; kk++) {
+          if (dansPorte && (kk + 0.5) * dz < passe.zh) continue;
+          if (!solide[id(i, j, kk)]) solide[id(i, j, kk)] = SOLIDE.cloison;
+        }
       }
   }
   // Déflecteurs d'angle : le coin derrière l'arrondi est plein

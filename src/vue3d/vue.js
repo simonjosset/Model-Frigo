@@ -6,7 +6,8 @@ import {
   MeshLambertMaterial, MeshBasicMaterial, LineBasicMaterial, LineSegments, InstancedMesh, Object3D, Plane, DoubleSide, MOUSE, TOUCH, EdgesGeometry, Box3, TubeGeometry, QuadraticBezierCurve3
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { dims, polygone, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "../core/geometrie.js";
+import { dims, polygone, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo, etirerRetombee, porteCloison } from "../core/geometrie.js";
+import { pointsAccroche, mesure } from "../core/cotes.js";
 import { produitsLocaux, ROUES } from "../core/produits.js";
 import { creerFlux } from "./flux.js";
 
@@ -15,9 +16,11 @@ export function webglDisponible() {
   catch (e) { return false; }
 }
 
+const fr = (x, d) => (+x).toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d });
 const PASTELS = [0xf4c7d3, 0xcfe8d4, 0xf6e7b4, 0xdccbf0, 0xf8d3b0, 0xc9e4f5];
 
-/* cb : { onPick(id|null), onDrag(id, champ, valeurs), onDragFin(id), onSonde(info|null) } */
+/* cb : { onPick(id|null), onDrag(id, champ, valeurs), onDragFin(id), onSonde(info|null),
+        onCote(a, b), onCoteSuppr(id), onCoteSurvol(info|null) } */
 export function creerVue(conteneur, cb) {
   cb = cb || {};
   const renderer = new WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
@@ -102,6 +105,12 @@ export function creerVue(conteneur, cb) {
     M.porte = new MeshLambertMaterial({ color: 0xe07b39, side: DoubleSide, transparent: true, opacity: 0.85 });
     M.sel = new LineBasicMaterial({ color: theme.accent });
     M.poignee = new MeshBasicMaterial({ color: theme.accent });
+    M.poigneeDessus = new MeshBasicMaterial({ color: theme.accent, depthTest: false, transparent: true }); // visible même derrière l'appareil
+    // Cotes : dessinées par-dessus les objets
+    M.cote = new LineBasicMaterial({ color: s ? 0xffd166 : 0xb3541e, depthTest: false, transparent: true });
+    M.coteBout = new MeshBasicMaterial({ color: s ? 0xffd166 : 0xb3541e, depthTest: false, transparent: true });
+    M.accroche = new MeshBasicMaterial({ color: 0x14ca74, depthTest: false, transparent: true });
+    M.libre = new MeshBasicMaterial({ color: s ? 0xffffff : 0x1d3b7a, depthTest: false, transparent: true, opacity: 0.8 });
   }
   materiaux();
 
@@ -272,10 +281,29 @@ export function creerVue(conteneur, cb) {
     demander();
   }
   function construireCloison(c) {
-    const g = new Group(), cg = cloisonGeo(c, projet.chambre);
-    const m = boite(cg.L, cg.ep, cg.zh - cg.zb, M.cloison, (c.x0 + c.x1) / 2, (c.y0 + c.y1) / 2, (cg.zb + cg.zh) / 2);
-    m.rotation.z = Math.atan2(cg.uy, cg.ux); g.add(m);
-    const ed = new LineSegments(new EdgesGeometry(m.geometry), M.trait); ed.position.copy(m.position); ed.rotation.copy(m.rotation); g.add(ed);
+    const g = new Group(), cg = cloisonGeo(c, projet.chambre), po = porteCloison(c, projet.chambre), rot = Math.atan2(cg.uy, cg.ux);
+    // Morceau de cloison de t0 à t1 (le long de la cloison) et de z0 à z1
+    const morceau = (t0, t1, z0, z1, mat, ep) => {
+      if (t1 - t0 < 0.005 || z1 - z0 < 0.005) return null;
+      const tm = (t0 + t1) / 2, m = boite(t1 - t0, ep || cg.ep, z1 - z0, mat, c.x0 + cg.ux * tm, c.y0 + cg.uy * tm, (z0 + z1) / 2);
+      m.rotation.z = rot; g.add(m);
+      const ed = new LineSegments(new EdgesGeometry(m.geometry), M.trait); ed.position.copy(m.position); ed.rotation.copy(m.rotation); g.add(ed);
+      return m;
+    };
+    if (!po) { morceau(0, cg.L, cg.zb, cg.zh, M.cloison); return g; }
+    morceau(0, po.t0, cg.zb, cg.zh, M.cloison);
+    morceau(po.t1, cg.L, cg.zb, cg.zh, M.cloison);
+    morceau(po.t0, po.t1, po.zh, cg.zh, M.cloison);
+    if (!po.ouverte) { morceau(po.t0, po.t1, po.zb, po.zh, M.porte, Math.min(cg.ep, 0.06)); return g; }
+    // Porte ouverte : vantail tourné à 90° autour de ses gonds (côté t0)
+    const hx = c.x0 + cg.ux * po.t0, hy = c.y0 + cg.uy * po.t0, nx = -cg.uy, ny = cg.ux, ep = 0.04;
+    const v = boite(po.w, ep, po.zh - po.zb, M.porte, hx + nx * (cg.ep / 2 + po.w / 2), hy + ny * (cg.ep / 2 + po.w / 2), (po.zb + po.zh) / 2);
+    v.rotation.z = Math.atan2(ny, nx); g.add(v);
+    const cadre = [];
+    [[po.t0, po.t0], [po.t1, po.t1]].forEach(([t]) => cadre.push(c.x0 + cg.ux * t, c.y0 + cg.uy * t, po.zb, c.x0 + cg.ux * t, c.y0 + cg.uy * t, po.zh));
+    cadre.push(hx, hy, po.zh, c.x0 + cg.ux * po.t1, c.y0 + cg.uy * po.t1, po.zh);
+    const cg2 = new BufferGeometry(); cg2.setAttribute("position", new Float32BufferAttribute(cadre, 3));
+    g.add(new LineSegments(cg2, new LineBasicMaterial({ color: 0xffb27a })));
     return g;
   }
   function construireObstacle(o) {
@@ -341,6 +369,15 @@ export function creerVue(conteneur, cb) {
         const p = new Mesh(new SphereGeometry(0.12, 16, 12), M.poignee); p.position.set(x, y, 0.12); p.userData.poignee = q; scene.add(p); poignees.push(p);
       });
     }
+    // Retombée d'un évaporateur : une poignée à chaque bout, au bas du panneau, pour régler sa longueur
+    if (o.userData.liste === "evaps") {
+      const ev = projet.evaps.find(x => x.id === selId);
+      if (ev && ev.retombee) retombeesEvap(Object.assign({}, ev, { off: false }), projet.chambre, basRetombeeAuto(projet)).forEach(rt =>
+        [[rt.x0, rt.y0, 0], [rt.x1, rt.y1, 1]].forEach(([x, y, b]) => {
+          const p = new Mesh(new SphereGeometry(0.1, 16, 12), M.poigneeDessus); p.position.set(x, y, rt.zb); p.renderOrder = 12;
+          p.userData.poignee = { retombee: rt.s, bout: b, z: rt.zb }; scene.add(p); poignees.push(p);
+        }));
+    }
     demander();
   }
 
@@ -356,14 +393,20 @@ export function creerVue(conteneur, cb) {
   }
   const pv = new Vector3();
   function majEtiquettes() {
-    calque.hidden = !aff.etiquettes; if (!aff.etiquettes) return;
+    calque.hidden = !aff.etiquettes && !etiqCotes.length; calque.classList.toggle("sans-noms", !aff.etiquettes);
     const w = el.clientWidth, h = el.clientHeight;
-    etiq.forEach(t => {
+    if (aff.etiquettes) etiq.forEach(t => {
       pv.copy(t.pos).project(camera);
       const vis = pv.z < 1 && Math.abs(pv.x) < 1.1 && Math.abs(pv.y) < 1.1;
       t.d.style.display = vis ? "" : "none";
       if (vis) t.d.style.transform = "translate(" + ((pv.x + 1) / 2 * w).toFixed(1) + "px," + ((1 - pv.y) / 2 * h).toFixed(1) + "px) translate(-50%,-100%)";
       t.d.classList.toggle("on", t.id === selId);
+    });
+    etiqCotes.forEach(t => {
+      pv.copy(t.pos).project(camera);
+      const vis = pv.z < 1 && Math.abs(pv.x) < 1.1 && Math.abs(pv.y) < 1.1;
+      t.d.style.display = vis ? "" : "none";
+      if (vis) t.d.style.transform = "translate(" + ((pv.x + 1) / 2 * w).toFixed(1) + "px," + ((1 - pv.y) / 2 * h).toFixed(1) + "px) translate(-50%,-50%)";
     });
   }
 
@@ -413,6 +456,7 @@ export function creerVue(conteneur, cb) {
   el.addEventListener("pointerdown", ev => {
     if (ev.button !== 0) return;
     bas = { x: ev.clientX, y: ev.clientY, t: performance.now() };
+    if (coter) return; // mode cote : un appui sert à poser un point, un glissé tourne la vue
     const o = objetSous(ev);
     if (o && o.poignee) { glisse = { poignee: o.poignee, id: selId }; controls.enabled = false; el.setPointerCapture(ev.pointerId); return; }
     if (o && o.id && o.id === selId) {
@@ -425,13 +469,19 @@ export function creerVue(conteneur, cb) {
   });
   el.addEventListener("pointermove", ev => {
     if (!glisse) {
+      if (coter) { if (!ev.buttons) survolCote(ev); return; }
       if (ev.pointerType === "mouse" && !ev.buttons) { const o = objetSous(ev); el.style.cursor = o ? (o.id === selId || o.poignee ? "move" : "pointer") : ""; }
       return;
     }
-    const p = solSous(ev, 0); if (!p) return;
     const pas = ev.shiftKey ? 0.01 : 0.05, ar = v => Math.round(v / pas) * pas;
+    const rt = glisse.poignee && typeof glisse.poignee === "object" ? glisse.poignee : null;
+    const p = solSous(ev, rt ? rt.z : 0); if (!p) return;
     glisse.bouge = true;
-    if (glisse.poignee) {
+    if (rt) {
+      const e = objetProjet(glisse.id);
+      const v = e && etirerRetombee(e, projet.chambre, basRetombeeAuto(projet), rt.retombee, rt.bout, p.x, p.y, pas);
+      if (v) cb.onDrag && cb.onDrag(glisse.id, v);
+    } else if (glisse.poignee) {
       const v = glisse.poignee === "a" ? { x0: ar(p.x), y0: ar(p.y) } : { x1: ar(p.x), y1: ar(p.y) };
       cb.onDrag && cb.onDrag(glisse.id, v);
     } else if (glisse.liste === "cloisons") {
@@ -447,6 +497,7 @@ export function creerVue(conteneur, cb) {
     if (!bas) return;
     const bouge = Math.hypot(ev.clientX - bas.x, ev.clientY - bas.y), long = performance.now() - bas.t; bas = null;
     if (bouge > 5 || long > 700) return;
+    if (coter) { poserPoint(ev); return; }
     // Sonde sur le plan de coupe, sinon sélection
     viser(ev);
     const s = flux.sonde(ray);
@@ -458,6 +509,94 @@ export function creerVue(conteneur, cb) {
   function objetProjet(id) {
     for (const l of ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs"]) { const o = projet[l].find(x => x.id === id); if (o) return o; }
     return null;
+  }
+
+  /* ---------- Cotes : mesure point à point avec accroche ---------- */
+  let coter = false, accroches = null, premier = null, survol = null;
+  const gCotes = new Group(); gCotes.renderOrder = 10; scene.add(gCotes);
+  const gApercu = new Group(); scene.add(gApercu);
+  let etiqCotes = [];
+  const RAYON_ACCROCHE = 16; // pixels (doigt : plus large)
+  function bout(p, mat, r) { const m = new Mesh(new SphereGeometry(r || 0.035, 12, 8), mat); m.position.set(p[0], p[1], p[2]); m.renderOrder = 11; return m; }
+  function trait(a, b, mat) {
+    const g = new BufferGeometry(); g.setAttribute("position", new Float32BufferAttribute([a[0], a[1], a[2], b[0], b[1], b[2]], 3));
+    const l = new LineSegments(g, mat); l.renderOrder = 11; return l;
+  }
+  function texteCote(a, b) { return fr(mesure(a, b).L, 2) + " m"; }
+  function construireCotes() {
+    gCotes.children.slice().forEach(vider);
+    etiqCotes.forEach(t => t.d.remove()); etiqCotes = [];
+    if (!projet) return;
+    (projet.cotes || []).forEach(c => {
+      gCotes.add(trait(c.a, c.b, M.cote)); gCotes.add(bout(c.a, M.coteBout)); gCotes.add(bout(c.b, M.coteBout));
+      const d = document.createElement("div"); d.className = "etq cote";
+      const m = mesure(c.a, c.b);
+      d.title = "Δx " + fr(m.dx, 2) + " · Δy " + fr(m.dy, 2) + " · Δz " + fr(m.dz, 2) + " m";
+      d.innerHTML = "<span>" + texteCote(c.a, c.b) + '</span><button type="button" aria-label="Supprimer la cote" data-cote="' + c.id + '">✕</button>';
+      calque.appendChild(d);
+      etiqCotes.push({ id: c.id, d, pos: new Vector3((c.a[0] + c.b[0]) / 2, (c.a[1] + c.b[1]) / 2, (c.a[2] + c.b[2]) / 2) });
+    });
+    accroches = null;
+  }
+  calque.addEventListener("click", ev => {
+    const b = ev.target.closest("[data-cote]"); if (!b) return;
+    ev.stopPropagation(); cb.onCoteSuppr && cb.onCoteSuppr(b.dataset.cote);
+  });
+  /* Point visé : sommet le plus proche à l'écran (accroche), sinon la surface touchée (objet, mur, sol) */
+  function pointVise(ev, libre) {
+    viser(ev);
+    if (!libre) {
+      if (!accroches) accroches = pointsAccroche(projet);
+      const r = el.getBoundingClientRect(), w = r.width, h = r.height, mx = ev.clientX - r.left, my = ev.clientY - r.top;
+      const rayon = ev.pointerType === "mouse" ? RAYON_ACCROCHE : RAYON_ACCROCHE * 1.8;
+      let best = null, dmin = rayon;
+      for (const q of accroches) {
+        pv.set(q.p[0], q.p[1], q.p[2]).project(camera);
+        if (pv.z > 1 || pv.z < -1) continue;
+        const d = Math.hypot((pv.x + 1) / 2 * w - mx, (1 - pv.y) / 2 * h - my);
+        if (d < dmin - 0.5 || (best && Math.abs(d - dmin) <= 0.5 && pv.z < best.z)) { dmin = d; best = { p: q.p.slice(), nom: q.nom, z: pv.z }; }
+      }
+      if (best) return { p: best.p, nom: best.nom, accroche: true };
+    }
+    const cibles = pickables.concat(chambre ? chambre.children.filter(m => m.isMesh && m.visible) : []);
+    const hit = ray.intersectObjects(cibles, true).find(x => x.object.isMesh && x.object.visible);
+    if (hit) return { p: [hit.point.x, hit.point.y, hit.point.z], nom: null, accroche: false };
+    const s = solSous(ev, 0);
+    return s ? { p: [s.x, s.y, 0], nom: null, accroche: false } : null;
+  }
+  function majApercuCote() {
+    gApercu.children.slice().forEach(vider);
+    if (!coter) return;
+    if (premier) gApercu.add(bout(premier.p, M.coteBout, 0.045));
+    if (survol) {
+      gApercu.add(bout(survol.p, survol.accroche ? M.accroche : M.libre, survol.accroche ? 0.06 : 0.04));
+      if (premier) gApercu.add(trait(premier.p, survol.p, M.cote));
+    }
+    demander();
+  }
+  function infoCote() {
+    if (!cb.onCoteSurvol) return;
+    if (!coter) { cb.onCoteSurvol(null); return; }
+    const a = premier, b = survol;
+    cb.onCoteSurvol({ premier: a ? a.p : null, point: b ? b.p : null, nom: b && b.nom, accroche: !!(b && b.accroche), mesure: a && b && a !== b ? mesure(a.p, b.p) : null });
+  }
+  function survolCote(ev) {
+    survol = pointVise(ev, ev.shiftKey);
+    el.style.cursor = "crosshair";
+    majApercuCote(); infoCote();
+  }
+  function poserPoint(ev) {
+    const q = pointVise(ev, ev.shiftKey); if (!q) return;
+    if (!premier) { premier = q; survol = q; majApercuCote(); infoCote(); return; }
+    const a = premier.p, b = q.p; premier = null; survol = q;
+    if (mesure(a, b).L > 0.005) cb.onCote && cb.onCote(a, b);
+    majApercuCote(); infoCote();
+  }
+  function setCoter(on) {
+    coter = !!on; premier = null; survol = null; accroches = null;
+    el.style.cursor = coter ? "crosshair" : "";
+    calque.classList.toggle("coter", coter);
+    majApercuCote(); infoCote();
   }
 
   /* ---------- API ---------- */
@@ -477,16 +616,22 @@ export function creerVue(conteneur, cb) {
       Object.values(objets).forEach(vider); objets = {};
       construireChambre();
       ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs"].forEach(l => p[l].forEach(o => construireObjet(l, o)));
-      majPickables(); construireEtiquettes(); majSelection(); colorerProduits();
+      majPickables(); construireEtiquettes(); construireCotes(); majSelection(); colorerProduits();
       taille();
       if (premier || !garder) vue("iso", true);
       demander();
     },
     /* Reconstruit un seul objet (déplacement) */
     majObjet(liste, o) {
-      construireObjet(liste, o); majPickables(); construireEtiquettes(); majSelection(); colorerProduits(); demander();
+      construireObjet(liste, o); majPickables(); construireEtiquettes(); majSelection(); colorerProduits(); accroches = null; demander();
     },
     selection(id) { selId = id || null; majSelection(); },
+    setCoter, coter: () => coter,
+    /* Position à l'écran (pixels de la page) d'un point de la chambre, et des poignées affichées */
+    ecran(q) { const r = el.getBoundingClientRect(); pv.set(q[0], q[1], q[2]).project(camera); return { x: r.left + (pv.x + 1) / 2 * r.width, y: r.top + (1 - pv.y) / 2 * r.height }; },
+    poignees() { return poignees.map(m => Object.assign(this.ecran([m.position.x, m.position.y, m.position.z]), { q: m.userData.poignee })); },
+    /* Échap en mode cote : abandonne le premier point ; renvoie faux s'il n'y en avait pas */
+    annulerPoint() { if (!premier) return false; premier = null; majApercuCote(); infoCote(); return true; },
     setChamp(F, vitesses) { flux.setChamp(F); vitEchelles = vitesses || null; colorerProduits(); animer(flux.anime()); demander(); },
     setAffichage(o) {
       Object.assign(aff, o);
@@ -498,7 +643,23 @@ export function creerVue(conteneur, cb) {
     },
     vue, rendre: demander,
     flux,
-    toPNG() { rendre(); return el.toDataURL("image/png"); },
+    toPNG() {
+      rendre();
+      if (!etiqCotes.length) return el.toDataURL("image/png");
+      // Cotes : longueurs écrites sur l'image
+      const c = document.createElement("canvas"); c.width = el.width; c.height = el.height;
+      const x = c.getContext("2d"), k = el.width / (el.clientWidth || el.width);
+      x.drawImage(el, 0, 0);
+      x.font = "600 " + Math.round(12 * k) + "px system-ui, sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
+      (projet.cotes || []).forEach(q => {
+        pv.set((q.a[0] + q.b[0]) / 2, (q.a[1] + q.b[1]) / 2, (q.a[2] + q.b[2]) / 2).project(camera);
+        if (pv.z > 1) return;
+        const t = texteCote(q.a, q.b), px = (pv.x + 1) / 2 * c.width, py = (1 - pv.y) / 2 * c.height, tw = x.measureText(t).width + 10 * k;
+        x.fillStyle = theme.sombre ? "rgba(11,23,57,.85)" : "rgba(255,255,255,.9)"; x.fillRect(px - tw / 2, py - 9 * k, tw, 18 * k);
+        x.fillStyle = theme.sombre ? "#ffd166" : "#b3541e"; x.fillText(t, px, py);
+      });
+      return c.toDataURL("image/png");
+    },
     dispose() { animer(false); if (ro) ro.disconnect(); controls.dispose(); renderer.dispose(); el.remove(); calque.remove(); }
   };
 }
