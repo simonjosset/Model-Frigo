@@ -5,7 +5,7 @@ Modélisation 3D d'une chambre froide, de ses évaporateurs et des flux d'air pr
 ## Ce que fait l'outil
 
 - **Chambre** rectangulaire ou en L (rectangle total moins un coin, choisi sur un plan coté), hauteur sous plafond, portes accrochées aux murs.
-- **Évaporateurs** simple flux (reprise arrière) ou double flux (reprise dessous) : débit, portée constructeur, nombre et diamètre des hélices, dimensions, hauteur de pose, sens de soufflage. Un appareil peut être masqué pour simuler la chambre sans lui.
+- **Évaporateurs** simple flux (reprise arrière) ou double flux (reprise dessous) : débit, portée constructeur, nombre et diamètre des hélices, dimensions, hauteur de pose, sens de soufflage. Option **coudes vers le bas** : une manchette coudée à 90° en sortie de chaque hélice dirige le soufflage verticalement (descente réglable). Un appareil peut être masqué pour simuler la chambre sans lui.
 - **Échelles** (chariots à glissières) chargées de produits : hauteur, largeur, profondeur, nombre d'étages, produit (pot de glace 3,3 kg, bacs gastronormes, plaques, cartons ou produit personnalisé), produits par étage et étages chargés, rangées d'échelles avec écart et allée. Chaque produit est dessiné dans la 3D ; nombre de produits et masse calculés.
 - **Cloisons** pleine hauteur ou partielles (l'air passe dessus ou dessous), **obstacles** pleins ou ajourés.
 - **Flux d'air** :

@@ -76,6 +76,7 @@ function mesurer(F, G, kEvap, histo, dernier) {
     let ratio = null;
     const mesures = [];
     for (const cote of ev.geo.cotes) {
+      if (cote.fans.some(f => f.coude)) continue; // soufflage vers le bas : pas de portée horizontale à recaler
       const m = porteeMesuree(F, ev, cote);
       mesures.push(m);
       // Portée mesurable seulement si le jet retombe sous 0,25 m/s loin de la paroi (sinon il freine en l'approchant)

@@ -6,6 +6,7 @@ import { calculerApercu } from "../src/core/apercu.js";
 import { preparer, pas, divergence, demarrer } from "../src/core/cfd.js";
 import { vitesse } from "../src/core/champ.js";
 import { analyser } from "../src/core/analyse.js";
+import { evapGeo } from "../src/core/geometrie.js";
 import { simuler } from "../src/core/simulation.js";
 
 const salle = extra => normaliser(Object.assign({ chambre: { longueur: 10, largeur: 6, H: 3.5 }, evaps: [{ nom: "E", x: 0.6, y: 3, dir: 0, len: 1.8, dep: 0.5, eh: 0.5, nf: 2, dv: 0.45, q: 6000, T: 7 }] }, extra || {}));
@@ -78,4 +79,22 @@ test("projet d'exemple : analyse complète sans erreur", () => {
   assert.equal(ec.chariots[0].etages.length, ec.info.charges, "une vitesse par étage chargé");
   for (const c of ec.chariots) for (const t of c.etages) assert.ok(t.v >= 0 && t.vPassage >= t.v && t.z > 0 && t.z < 1.875);
   assert.ok(R.produits.n > 0 && R.taux > 30);
+});
+
+test("coudes vers le bas : l'air sort sous chaque coude, débit conservé, jet descendant", () => {
+  const p = salle(); p.evaps[0].coude = true; p.evaps[0].coudeDescente = 0.2;
+  const G = construireGrille(p, { h: 0.2 }), S = preparer(G);
+  let bas = 0, horiz = 0;
+  for (let f = 0; f < S.NW; f++) if (S.fw[f] && S.bw[f] < 0) bas -= S.bw[f] * G.dx * G.dy;
+  for (let f = 0; f < S.NU; f++) if (S.fu[f] && S.bu[f] > 0 && f % (G.nx + 1) > 3) horiz += S.bu[f];
+  assert.ok(Math.abs(bas - 6000 / 3600) < 1e-3, "débit soufflé vers le bas " + bas);
+  assert.equal(horiz, 0, "plus de soufflage horizontal");
+  const sim = demarrer(G, { init: calculerApercu(p, { grille: G }), tFin: 20 });
+  while (!sim.fini) sim.avancer(50);
+  const F = sim.resultat(), so = evapGeo(p.evaps[0], p.chambre).cotes[0].fans[0].coude.sortie, o = [0, 0, 0];
+  vitesse(F, so[0], so[1], so[2] - 0.5, o);
+  assert.ok(o[2] < -0.5, "jet descendant sous la sortie : " + o[2]);
+  const R = analyser(p, F);
+  assert.ok(R.evaps[0].cotes[0].coude && R.evaps[0].cotes[0].vArrivee > 0);
+  assert.ok(R.alertes.some(a => /soufflage vers le bas/.test(a.titre)));
 });

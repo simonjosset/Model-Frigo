@@ -95,6 +95,7 @@ export function analyser(projet, F) {
   for (const ev of G.evaps) {
     const e = ev.e, geo = ev.geo, cotes = [];
     for (const cote of geo.cotes) {
+      if (cote.fans.some(f => f.coude)) { cotes.push(analyseCoudes(F, G, e, cote, geo, A)); continue; }
       const m = porteeMesuree(F, ev, cote), Lf = m.Lf, ratio = e.T / Math.max(0.1, Lf), nom = e.nom + (geo.cotes.length > 1 ? (cote.s ? " (arrière)" : " (avant)") : "");
       cotes.push({ s: cote.s, Lf, portee: m.portee, paroi: m.paroi, vParoi: m.vParoi });
       if (Lf < 0.6) A("bad", nom + " : soufflage bouché", "Moins de " + fr(Lf, 1) + " m libres devant les ventilateurs.", e.id);
@@ -132,6 +133,34 @@ export function analyser(projet, F) {
   (F.info.avert || []).forEach(t => A("warn", "Calcul", t));
   chevauchements(projet, G).forEach(t => A("warn", "Implantation", t));
   return R;
+}
+
+/* Soufflage vers le bas par des coudes : vitesse d'arrivée et ce qui se trouve sous chaque sortie */
+function analyseCoudes(F, G, e, cote, geo, A) {
+  const nom = e.nom + (geo.cotes.length > 1 ? (cote.s ? " (arrière)" : " (avant)") : ""), o = [0, 0, 0];
+  const sorties = cote.fans.map(f => {
+    const so = f.coude.sortie;
+    // Premier obstacle sous la sortie (produits, objet plein) ou le sol
+    let zArr = 0, quoi = "sol";
+    for (let z = so[2] - G.dz / 2; z > 0; z -= G.dz / 2) {
+      const i = Math.min(G.nx - 1, Math.max(0, Math.floor(so[0] / G.dx))), j = Math.min(G.ny - 1, Math.max(0, Math.floor(so[1] / G.dy))), k = Math.min(G.nz - 1, Math.floor(z / G.dz)), c = i + G.nx * (j + G.ny * k);
+      if (G.solide[c] && G.solide[c] !== SOLIDE.evap) { zArr = z; quoi = G.solide[c] === SOLIDE.cloison ? "cloison" : "obstacle"; break; }
+      if (G.produit[c]) { zArr = z; quoi = "produits"; break; }
+    }
+    // Vitesse descendante la plus forte dans la largeur du jet, 30 cm au-dessus de l'arrivée
+    const zMes = Math.min(so[2] - 0.05, zArr + 0.3), b = f.coude.r + 0.25 * (so[2] - zMes), pas = Math.min(G.dx, G.dy) / 2;
+    let v = 0;
+    for (let dx = -b; dx <= b; dx += pas) for (let dy = -b; dy <= b; dy += pas) {
+      if (dx * dx + dy * dy > b * b) continue;
+      vitesse(F, so[0] + dx, so[1] + dy, zMes, o); if (-o[2] > v) v = -o[2];
+    }
+    return { zOut: so[2], chute: so[2] - zArr, quoi, v };
+  });
+  const vMoy = sorties.reduce((a, x) => a + x.v, 0) / sorties.length, chute = Math.min.apply(null, sorties.map(x => x.chute));
+  const surProduits = sorties.filter(x => x.quoi === "produits").length;
+  A("ok", nom + " : soufflage vers le bas", "Coudes en sortie des " + sorties.length + " hélices, sortie à " + fr(sorties[0].zOut, 2) + " m du sol ; l'air arrive à environ " + fr(vMoy, 2) + " m/s, 30 cm avant " + (surProduits ? "les produits (" + surProduits + " sortie" + (surProduits > 1 ? "s" : "") + " au-dessus des échelles)" : sorties[0].quoi === "sol" ? "le sol" : "l'obstacle situé dessous") + ".", e.id);
+  if (vMoy > 1.5) A("warn", nom + " : soufflage vertical fort", "Environ " + fr(vMoy, 2) + " m/s en arrivant " + (surProduits ? "sur les produits" : "au sol") + " : courant d'air marqué, dessèchement possible des produits exposés.", e.id);
+  return { s: cote.s, coude: true, sorties, vArrivee: vMoy, chute, Lf: chute, portee: null, paroi: false };
 }
 
 function obstruction(G, cote, Lmax) {

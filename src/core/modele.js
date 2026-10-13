@@ -34,7 +34,7 @@ export function reglagesDefaut() {
 }
 
 export function evapDefaut(ch) {
-  return { type: "simple", x: ch.longueur / 2, y: 0.5, dir: 90, len: 2.4, dep: 0.6, eh: 0.6, zb: null, nf: 3, dv: 0.5, q: 12000, T: 18, off: false };
+  return { type: "simple", x: ch.longueur / 2, y: 0.5, dir: 90, len: 2.4, dep: 0.6, eh: 0.6, zb: null, nf: 3, dv: 0.5, q: 12000, T: 18, off: false, coude: false, coudeDescente: 0.15 };
 }
 export function echellesDefaut(ch) {
   return {
@@ -122,6 +122,7 @@ export function normaliserObjet(liste, o, ch) {
     r.zb = nOuNull(r.zb, 0, 20);
     r.nf = Math.round(n(r.nf, d.nf, 1, 8)); r.dv = n(r.dv, d.dv, 0.2, 1.2);
     r.q = n(r.q, d.q, 100, 200000); r.T = n(r.T, d.T, 1, 80); r.off = !!r.off;
+    r.coude = !!r.coude; r.coudeDescente = n(r.coudeDescente, 0.15, 0, 5);
   } else if (liste === "echelles") {
     r.x = n(r.x, d.x); r.y = n(r.y, d.y); r.dir = angle(r.dir);
     r.n = Math.round(n(r.n, d.n, 1, 60)); r.rangees = Math.round(n(r.rangees, d.rangees, 1, 20));

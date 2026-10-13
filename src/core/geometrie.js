@@ -76,7 +76,9 @@ export function evapGeo(e, ch) {
     const fans = [];
     for (let f = 0; f < nf; f++) {
       const o = ((f + 0.5) / nf - 0.5) * len;
-      fans.push({ o, c: [O[0] + pv[0] * o, O[1] + pv[1] * o, z.zc], q: qs / nf });
+      const fan = { o, c: [O[0] + pv[0] * o, O[1] + pv[1] * o, z.zc], q: qs / nf };
+      if (e.coude) fan.coude = coudeGeo(fan.c, v, pv, dv, e.coudeDescente);
+      fans.push(fan);
     }
     return { s, u: v, p: pv, O, fans, q: qs };
   });
@@ -84,6 +86,19 @@ export function evapGeo(e, ch) {
     u, p, dep, len, dv, z, cotes, q: e.q / 3600,
     box: { x0: e.x - d.hx, x1: e.x + d.hx, y0: e.y - d.hy, y1: e.y + d.hy, z0: z.zb, z1: z.zt },
     aspiration: e.type === "double" ? "dessous" : "arriere"
+  };
+}
+
+/* Coude à 90° en sortie d'hélice : l'air ressort vers le bas.
+   Encombrement : une hélice de large et de profondeur devant le ventilateur, du haut de l'hélice
+   jusqu'à la sortie, `descente` sous le bas de l'hélice. */
+export function coudeGeo(c, u, p, dv, descente) {
+  const r = dv / 2, zOut = Math.max(0.2, c[2] - r - Math.max(0, descente || 0));
+  const ax = [c[0] + u[0] * dv / 2, c[1] + u[1] * dv / 2];
+  const ex = Math.abs(u[0]) * dv / 2 + Math.abs(p[0]) * r, ey = Math.abs(u[1]) * dv / 2 + Math.abs(p[1]) * r;
+  return {
+    box: { x0: ax[0] - ex, x1: ax[0] + ex, y0: ax[1] - ey, y1: ax[1] + ey, z0: zOut, z1: c[2] + r },
+    sortie: [ax[0], ax[1], zOut], zOut, r
   };
 }
 

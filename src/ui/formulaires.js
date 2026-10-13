@@ -105,11 +105,24 @@ function panneauEvap(p, e, R) {
   h += '<div class="sec"><h4>Dimensions et pose</h4><div class="grid">' + num(e, "len", "Longueur", "m") + num(e, "dep", "Profondeur", "m") + num(e, "eh", "Hauteur", "m") +
     num(e, "zb", "Hauteur de pose (bas)", "m", { vide: "Auto : " + aff(g.z.zb, 2) }) +
     num(e, "x", "Position x (centre)", "m") + num(e, "y", "Position y (centre)", "m") + dirs(e, "dir", "Sens de soufflage") + "</div>";
-  h += '<p class="hint">Hauteur de pose vide : appareil suspendu à 8 cm sous le plafond.</p>';
+  h += '<p class="hint">Hauteur de pose vide : appareil suspendu à 8 cm sous le plafond.</p></div>';
+  h += '<div class="sec"><h4>Coudes de soufflage</h4><label class="chk"><input type="checkbox" data-k="coude" data-type="chk"' + (e.coude ? " checked" : "") + '> Coude vers le bas en sortie de chaque ventilateur</label>';
+  if (e.coude) {
+    const so = g.cotes[0].fans[0].coude;
+    h += '<div class="grid" style="margin-top:8px">' + num(e, "coudeDescente", "Descente sous l'hélice", "m") + '<div><label>Sortie à</label><div class="f"><input readonly value="' + aff(so.zOut, 2) + '"><span class="u">m du sol</span></div></div></div>';
+    h += '<p class="hint">Coude à 90° du diamètre de l\'hélice : l\'air ressort vers le bas, à la verticale juste devant chaque ventilateur. La portée constructeur sert à régler la force du jet ; la portée horizontale n\'est plus contrôlée.</p>';
+  }
   const ev = R && R.evaps.find(x => x.id === e.id);
   const lignes = [["Débit par ventilateur", fr(e.q / g.cotes.length / nf, 0) + " m³/h"], ["Vitesse dans l'hélice (approx.)", fr(vS, 1) + " m/s"], ["Distance au plafond", fr(g.z.drop, 2) + " m"]];
   if (ev) ev.cotes.forEach((c, i) => {
     const s = ev.cotes.length > 1 ? (i ? " (arrière)" : " (avant)") : "";
+    if (c.coude) {
+      lignes.push(["Hauteur de chute" + s, fr(c.chute, 2) + " m"]);
+      lignes.push(["Air à 30 cm de l'arrivée" + s, fr(c.vArrivee, 2) + " m/s vers le bas"]);
+      const pr = c.sorties.filter(x => x.quoi === "produits").length;
+      if (pr) lignes.push(["Sorties au-dessus des échelles", pr + " sur " + c.sorties.length]);
+      return;
+    }
     lignes.push(["Espace libre devant" + s, fr(c.Lf, 1) + " m"]);
     lignes.push(["Portée dans la chambre" + s, c.paroi ? "jusqu'à la paroi" + (c.vParoi != null ? " (" + fr(c.vParoi, 2) + " m/s)" : "") : fr(c.portee, 1) + " m"]);
   });
@@ -230,7 +243,7 @@ export function panneauReglages(p, a) {
 }
 
 export function resumeObjet(liste, o) {
-  if (liste === "evaps") return fr(o.q, 0) + " m³/h · " + fr(o.T, 0) + " m" + (o.type === "double" ? " · double flux" : "");
+  if (liste === "evaps") return fr(o.q, 0) + " m³/h · " + fr(o.T, 0) + " m" + (o.type === "double" ? " · double flux" : "") + (o.coude ? " · coudes ↓" : "");
   if (liste === "echelles") { const g = echellesGeo(o); return g.total + " éch. · " + fr(g.total * g.info.nb, 0) + " produits"; }
   if (liste === "cloisons") { return "L " + fr(Math.hypot(o.x1 - o.x0, o.y1 - o.y0), 2) + " m" + (o.zh != null || o.zb > 0 ? " · partielle" : ""); }
   if (liste === "obstacles") return fr(o.L, 2) + " × " + fr(o.l, 2) + " × " + fr(o.h, 2) + " m" + (o.poreux > 0.01 ? " · ajouré" : "");

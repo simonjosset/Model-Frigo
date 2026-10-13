@@ -86,7 +86,7 @@ export function demarrer() {
     projet.evaps.forEach(e => {
       if (e.off) return;
       const g = evapGeo(e, projet.chambre);
-      g.cotes.forEach(c => c.fans.forEach(f => l.push({ c: f.c, n: [c.u[0], c.u[1], 0], r: g.dv / 2, q: f.q })));
+      g.cotes.forEach(c => c.fans.forEach(f => l.push(f.coude ? { c: f.coude.sortie, n: [0, 0, -1], r: f.coude.r, q: f.q } : { c: f.c, n: [c.u[0], c.u[1], 0], r: g.dv / 2, q: f.q })));
     });
     return l;
   }
@@ -255,7 +255,10 @@ export function demarrer() {
       h += '<div class="sec"><h4>Jets des évaporateurs</h4><table class="tab-mini"><tr><th>Appareil</th><th class="n">Libre</th><th class="n">Constr.</th><th class="n">' + (mode === "cfd" ? "Calculée" : "Aperçu") + "</th></tr>";
       R.evaps.forEach(e => {
         const o = projet.evaps.find(x => x.id === e.id);
-        e.cotes.forEach((c, k) => { h += '<tr><td>' + esc(e.nom) + (e.cotes.length > 1 ? (k ? " ←" : " →") : "") + '</td><td class="n">' + fr(c.Lf, 1) + ' m</td><td class="n">' + (o ? fr(o.T, 1) + " m" : "–") + '</td><td class="n">' + (c.paroi ? "paroi" + (c.vParoi != null ? " " + fr(c.vParoi, 2) + " m/s" : "") : fr(c.portee, 1) + " m") + "</td></tr>"; });
+        e.cotes.forEach((c, k) => {
+          if (c.coude) { h += '<tr><td>' + esc(e.nom) + ' ↓</td><td class="n">' + fr(c.chute, 1) + ' m</td><td class="n">coudes</td><td class="n">' + fr(c.vArrivee, 2) + " m/s</td></tr>"; return; }
+          h += '<tr><td>' + esc(e.nom) + (e.cotes.length > 1 ? (k ? " ←" : " →") : "") + '</td><td class="n">' + fr(c.Lf, 1) + ' m</td><td class="n">' + (o ? fr(o.T, 1) + " m" : "–") + '</td><td class="n">' + (c.paroi ? "paroi" + (c.vParoi != null ? " " + fr(c.vParoi, 2) + " m/s" : "") : fr(c.portee, 1) + " m") + "</td></tr>";
+        });
       });
       h += "</table>";
       if (mode === "cfd" && i.recalage && i.recalage.length) h += '<p class="hint">Portée calculée : distance où le jet retombe sous 0,25 m/s. ' + (i.passes > 1 ? "Les jets ont été recalés sur la portée constructeur quand l'espace libre le permettait." : "") + "</p>";

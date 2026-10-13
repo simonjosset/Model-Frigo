@@ -102,6 +102,15 @@ const csv = await Promise.all([page.waitForEvent("download"), page.click('[data-
 check("échelles : export CSV des vitesses", /vitesses\.csv$/.test(csv), csv);
 await page.screenshot({ path: path.join(SHOTS, "3b-vitesses-produits.png") });
 
+// Coudes vers le bas en sortie des hélices
+await page.click('[data-sel="' + await page.evaluate(() => MF.projet().evaps[0].id) + '"]');
+await page.check('input[data-k="coude"]');
+check("évaporateur : coudes vers le bas activés", await page.evaluate(() => MF.projet().evaps[0].coude === true) && await page.isVisible("#f_coudeDescente"));
+await attendre(page, () => MF.champs.apercu && MF.champs.apercu.R.evaps[0].cotes[0].coude);
+await page.screenshot({ path: path.join(SHOTS, "3c-coudes.png") });
+await page.click("#bAnnuler");
+check("annuler : coudes retirés", await page.evaluate(() => MF.projet().evaps[0].coude === false));
+
 // Modification après calcul : résultat signalé à relancer
 const idEv = await page.evaluate(() => MF.projet().evaps[0].id);
 await page.click('[data-sel="' + idEv + '"]');

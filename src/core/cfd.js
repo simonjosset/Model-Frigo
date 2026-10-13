@@ -81,6 +81,24 @@ export function preparer(G, opts) {
     const e = ev.e, geo = ev.geo, r = ev.r;
     let qPose = 0;
     for (const cote of geo.cotes) {
+      if (cote.fans.some(f => f.coude)) {
+        // Coudes : chaque hélice souffle vers le bas par le dessous de son coude
+        let K = 0, A = 0, q = 0;
+        const sorties = [];
+        cote.fans.forEach(fan => {
+          const faces = facesCaisson(fan.rc, 2, -1);
+          if (!faces.length) { S.avert.push(e.nom + " : sortie d'un coude bouchée (objet juste dessous)."); return; }
+          const Af = faces.reduce((a, f) => a + f.A, 0);
+          faces.forEach(f => imposer(f, -fan.q / Af));
+          K += fan.q * fan.q / Af; A += Af; q += fan.q;
+          sorties.push({ c: fan.coude.sortie, r: fan.coude.r });
+        });
+        if (!sorties.length) continue;
+        qPose += q;
+        jets.push({ e, geo, cote, K, A, q, vSortie: q / A, coude: true, sorties });
+        S.sorties.push({ id: e.id, nom: e.nom, cote: cote.s, faces: sorties.length, A, v: q / A });
+        continue;
+      }
       const axe = cote.u[0] !== 0 ? 0 : 1, sens = cote.u[0] !== 0 ? cote.u[0] : cote.u[1];
       const faces = facesCaisson(r, axe, sens);
       if (!faces.length) { S.avert.push(e.nom + " : soufflage contre une paroi, ventilateurs ignorés."); continue; }
@@ -138,7 +156,18 @@ export function preparer(G, opts) {
   for (const J of jets) {
     const e = J.e, z = J.geo.z, T = Math.max(0.5, e.T), att = z.attache;
     J.k = R.kPortee * ((opts.kEvap && opts.kEvap[e.id]) || 1);
-    J.nu = Math.max(R.nuPiece, J.k * 3 * J.K * (1 + att) / (8 * Math.PI * 0.25 * T));
+    J.nu = Math.max(R.nuPiece, J.k * 3 * J.K * (J.coude ? 1 : 1 + att) / (8 * Math.PI * 0.25 * T));
+    if (J.coude) {
+      // Jets verticaux vers le bas : cône sous chaque sortie de coude, puis nappe au sol
+      for (const so of J.sorties) for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+        const c = cid(i, j, k); if (solide[c]) continue;
+        const zz = (k + 0.5) * dz, s = so.c[2] - zz; if (s < -0.3) continue;
+        const rr = Math.hypot((i + 0.5) * dx - so.c[0], (j + 0.5) * dy - so.c[1]), b = so.r + 0.25 * Math.max(0, s) + (zz < 0.5 ? 1.5 : 0);
+        const w = Math.exp(-0.5 * rr * rr / (b * b)), val = R.nuPiece + w * (J.nu - R.nuPiece);
+        if (val > nu[c]) nu[c] = val;
+      }
+      continue;
+    }
     const O = J.cote.O, u = J.cote.u, p = J.cote.p, half = e.len / 2;
     for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
       const c = cid(i, j, k); if (solide[c]) continue;

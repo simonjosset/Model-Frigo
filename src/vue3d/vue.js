@@ -3,7 +3,7 @@
 import {
   Scene, PerspectiveCamera, WebGLRenderer, HemisphereLight, DirectionalLight, AmbientLight, Raycaster, Vector2, Vector3, Color, Group, Mesh,
   BoxGeometry, CircleGeometry, RingGeometry, CylinderGeometry, ConeGeometry, SphereGeometry, ShapeGeometry, Shape, BufferGeometry, Float32BufferAttribute,
-  MeshLambertMaterial, MeshBasicMaterial, LineBasicMaterial, LineSegments, InstancedMesh, Object3D, Plane, DoubleSide, MOUSE, TOUCH, EdgesGeometry, Box3
+  MeshLambertMaterial, MeshBasicMaterial, LineBasicMaterial, LineSegments, InstancedMesh, Object3D, Plane, DoubleSide, MOUSE, TOUCH, EdgesGeometry, Box3, TubeGeometry, QuadraticBezierCurve3
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { dims, polygone, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteSnap } from "../core/geometrie.js";
@@ -86,6 +86,7 @@ export function creerVue(conteneur, cb) {
     M.trait = new LineBasicMaterial({ color: s ? 0x8fb4ff : 0x1d3b7a, transparent: true, opacity: 0.75 });
     M.grille = new LineBasicMaterial({ color: s ? 0x3a4a78 : 0xc6cee0, transparent: true, opacity: 0.6 });
     M.caisson = new MeshLambertMaterial({ color: 0xe6eaf0 });
+    M.coude = new MeshLambertMaterial({ color: 0xc3cad4, side: DoubleSide });
     M.helice = new MeshLambertMaterial({ color: 0x2b3140, side: DoubleSide });
     M.anneau = new MeshLambertMaterial({ color: 0x3d7bff, side: DoubleSide });
     M.batterie = new MeshLambertMaterial({ color: 0x7c8799, side: DoubleSide });
@@ -182,6 +183,15 @@ export function creerVue(conteneur, cb) {
       geo.cotes[0].fans.forEach(f => disque(f.c, [u[0], u[1], 0]));
       plaque([e.x - u[0] * geo.dep / 2, e.y - u[1] * geo.dep / 2, z.zc], [-u[0], -u[1], 0], e.len * 0.94, z.eh * 0.8, M.batterie);
     }
+    // Coudes vers le bas en sortie d'hélice
+    geo.cotes.forEach(c => c.fans.forEach(f => {
+      if (!f.coude) return;
+      const so = f.coude.sortie, depart = new Vector3(f.c[0] - c.u[0] * 0.02, f.c[1] - c.u[1] * 0.02, f.c[2]);
+      const courbe = new QuadraticBezierCurve3(depart, new Vector3(so[0], so[1], f.c[2]), new Vector3(so[0], so[1], so[2]));
+      g.add(new Mesh(new TubeGeometry(courbe, 24, f.coude.r * 0.98, 20, false), M.coude));
+      const bord = new Mesh(new RingGeometry(f.coude.r * 0.82, f.coude.r * 1.02, 24), M.anneau);
+      bord.position.set(so[0], so[1], so[2] - 0.004); bord.rotation.x = Math.PI; g.add(bord);
+    }));
     // Flèche de soufflage sur le dessus
     geo.cotes.forEach(c => {
       const f = new Mesh(new ConeGeometry(0.09, 0.26, 12), M.fleche);

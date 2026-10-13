@@ -66,6 +66,8 @@ export function construireGrille(projet, opts) {
   for (const e of projet.evaps) {
     if (e.off) continue;
     const geo = evapGeo(e, ch), r = boite(geo.box, SOLIDE.evap);
+    // Coudes en sortie d'hélice : pleins (l'air n'en sort que par le dessous)
+    geo.cotes.forEach(c => c.fans.forEach(f => { if (f.coude) f.rc = boite(f.coude.box, SOLIDE.evap); }));
     G.evaps.push({ e, geo, r });
   }
   // Échelles chargées : milieu poreux sur la hauteur des produits
