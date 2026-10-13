@@ -2,7 +2,7 @@
    échelles, alertes. Fonctionne sur l'aperçu comme sur le calcul fin. */
 import { vitesse } from "./champ.js";
 import { distanceLibre, plage, SOLIDE } from "./grille.js";
-import { dims, volume, porteSnap, obstacleGeo, dansEncoche } from "./geometrie.js";
+import { dims, volume, porteSnap, obstacleGeo, dansEncoche, distSegment } from "./geometrie.js";
 
 function fr(x, d) { return (+x).toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d }); }
 
@@ -119,6 +119,9 @@ export function analyser(projet, F) {
     R.evaps.push({ id: e.id, nom: e.nom, cotes });
   }
 
+  // Retombées anti-bypass : jour au-dessus des échelles voisines, part du débit qui passe par-dessus
+  R.retombees = (G.retombees || []).map(rt => analyseRetombee(F, G, rt, A));
+
   // Brassage global
   if (!projet.evaps.length) A("bad", "Aucun évaporateur", "Ajoutez un évaporateur pour voir les flux d'air.");
   else if (!G.evaps.length) A("bad", "Tous les évaporateurs sont masqués", "Réaffichez au moins un évaporateur.");
@@ -133,6 +136,49 @@ export function analyser(projet, F) {
   (F.info.avert || []).forEach(t => A("warn", "Calcul", t));
   chevauchements(projet, G).forEach(t => A("warn", "Implantation", t));
   return R;
+}
+
+/* Retombée : sous son bord bas, l'air passe soit au-dessus des échelles (bypass), soit à travers ou
+   sous elles. On mesure le débit qui traverse le plan de la retombée, de part et d'autre du haut des échelles. */
+function analyseRetombee(F, G, rt, A) {
+  const L = Math.hypot(rt.x1 - rt.x0, rt.y1 - rt.y0) || 1e-9, ux = (rt.x1 - rt.x0) / L, uy = (rt.y1 - rt.y0) / L, nx = -uy, ny = ux;
+  // Échelles proches de la retombée (moins de 1,5 m en plan) : la plus haute fixe la limite du bypass
+  let hEch = 0;
+  for (const eg of G.echelles) for (const c of eg.geo.chariots) {
+    const d = distSegment(c.cx, c.cy, rt.x0, rt.y0, rt.x1, rt.y1) - Math.max(c.hx, c.hy);
+    if (d < 1.5 && eg.geo.info.nb) hEch = Math.max(hEch, eg.geo.info.H);
+  }
+  const nom = rt.nom.replace(" · retombée", ""), jour = hEch ? rt.zb - hEch : null;
+  // Avec des coudes : la retombée doit séparer les sorties de soufflage de la reprise, sinon elle ne sert à rien
+  const ev = G.evaps.find(x => x.e.id === rt.evap);
+  if (ev) {
+    const g = ev.geo, cote = g.cotes[0], so = cote.fans[0].coude, mx = (rt.x0 + rt.x1) / 2, my = (rt.y0 + rt.y1) / 2;
+    if (so) {
+      const asp = g.aspiration === "arriere" ? [ev.e.x - g.u[0] * g.dep / 2, ev.e.y - g.u[1] * g.dep / 2] : [ev.e.x, ev.e.y];
+      const cote1 = (so.sortie[0] - mx) * nx + (so.sortie[1] - my) * ny, cote2 = (asp[0] - mx) * nx + (asp[1] - my) * ny;
+      if (cote1 * cote2 > 0) A("warn", nom + " : retombée mal placée", "La retombée n'est pas entre la sortie des coudes et la reprise de l'évaporateur : elle ne peut pas empêcher le bypass et gêne la circulation. Placez-la au-dessus de la rangée d'échelles, entre les deux (réglage « Position »).", rt.evap);
+    }
+  }
+  let haut = 0, bas = 0;
+  if (hEch) {
+    const o = [0, 0, 0], ps = Math.min(G.dx, G.dy) / 2, pz = G.dz / 2;
+    for (let t = ps / 2; t < L; t += ps) {
+      const x = rt.x0 + ux * t, y = rt.y0 + uy * t;
+      if (x < 0 || y < 0 || x > G.W || y > G.B) continue;
+      for (let z = pz / 2; z < rt.zb; z += pz) {
+        vitesse(F, x, y, z, o);
+        const q = Math.abs(o[0] * nx + o[1] * ny) * ps * pz;
+        if (z >= hEch) haut += q; else bas += q;
+      }
+    }
+  }
+  const part = haut + bas > 1e-9 ? haut / (haut + bas) : null;
+  if (jour != null) {
+    if (jour > 0.15) A("warn", nom + " : bypass au-dessus des échelles", fr(jour * 100, 0) + " cm entre le bas de la retombée (" + fr(rt.zb, 2) + " m) et le haut des échelles voisines (" + fr(hEch, 2) + " m) : environ " + fr((part || 0) * 100, 0) + " % de l'air sous la retombée passe par-dessus les produits. Descendez la retombée.", rt.evap);
+    else if (jour < -0.02) A("warn", nom + " : retombée plus basse que les échelles", "Le bas de la retombée (" + fr(rt.zb, 2) + " m) descend sous le haut des échelles (" + fr(hEch, 2) + " m) : vérifiez que les échelles passent dessous.", rt.evap);
+    else A("ok", nom + " : retombée anti-bypass", "Bas de la retombée à " + fr(rt.zb, 2) + " m, au ras des échelles : " + fr((part || 0) * 100, 0) + " % de l'air sous la retombée passe par-dessus les produits.", rt.evap);
+  }
+  return { id: rt.id, evap: rt.evap, zb: rt.zb, zh: rt.zh, largeur: L, hEchelles: hEch || null, jour, partBypass: part };
 }
 
 /* Soufflage vers le bas par des coudes : vitesse d'arrivée et ce qui se trouve sous chaque sortie */

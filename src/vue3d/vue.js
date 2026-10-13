@@ -6,7 +6,7 @@ import {
   MeshLambertMaterial, MeshBasicMaterial, LineBasicMaterial, LineSegments, InstancedMesh, Object3D, Plane, DoubleSide, MOUSE, TOUCH, EdgesGeometry, Box3, TubeGeometry, QuadraticBezierCurve3
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { dims, polygone, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteSnap } from "../core/geometrie.js";
+import { dims, polygone, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteSnap, retombeesEvap, basRetombeeAuto } from "../core/geometrie.js";
 import { produitsLocaux, ROUES } from "../core/produits.js";
 import { creerFlux } from "./flux.js";
 
@@ -87,6 +87,7 @@ export function creerVue(conteneur, cb) {
     M.grille = new LineBasicMaterial({ color: s ? 0x3a4a78 : 0xc6cee0, transparent: true, opacity: 0.6 });
     M.caisson = new MeshLambertMaterial({ color: 0xe6eaf0 });
     M.coude = new MeshLambertMaterial({ color: 0xc3cad4, side: DoubleSide });
+    M.retombee = new MeshLambertMaterial({ color: 0x9fb2d6, transparent: true, opacity: 0.55, side: DoubleSide, depthWrite: false });
     M.helice = new MeshLambertMaterial({ color: 0x2b3140, side: DoubleSide });
     M.anneau = new MeshLambertMaterial({ color: 0x3d7bff, side: DoubleSide });
     M.batterie = new MeshLambertMaterial({ color: 0x7c8799, side: DoubleSide });
@@ -183,6 +184,12 @@ export function creerVue(conteneur, cb) {
       geo.cotes[0].fans.forEach(f => disque(f.c, [u[0], u[1], 0]));
       plaque([e.x - u[0] * geo.dep / 2, e.y - u[1] * geo.dep / 2, z.zc], [-u[0], -u[1], 0], e.len * 0.94, z.eh * 0.8, M.batterie);
     }
+    // Retombée anti-bypass
+    retombeesEvap(Object.assign({}, e, { off: false }), projet.chambre, basRetombeeAuto(projet)).forEach(rt => {
+      const L = Math.hypot(rt.x1 - rt.x0, rt.y1 - rt.y0), m = boite(L, rt.ep, rt.zh - rt.zb, M.retombee, (rt.x0 + rt.x1) / 2, (rt.y0 + rt.y1) / 2, (rt.zb + rt.zh) / 2);
+      m.rotation.z = Math.atan2(rt.y1 - rt.y0, rt.x1 - rt.x0); g.add(m);
+      const ed = new LineSegments(new EdgesGeometry(m.geometry), M.trait); ed.position.copy(m.position); ed.rotation.copy(m.rotation); g.add(ed);
+    });
     // Coudes vers le bas en sortie d'hélice
     geo.cotes.forEach(c => c.fans.forEach(f => {
       if (!f.coude) return;

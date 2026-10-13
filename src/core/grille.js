@@ -1,6 +1,6 @@
 /* Maillage de la chambre en cellules cubiques (ou presque) : parois, évaporateurs, cloisons,
    obstacles pleins, échelles chargées traitées en milieu poreux. Commun à l'aperçu et au calcul fin. */
-import { dims, volume, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, distSegment, dansEncoche } from "./geometrie.js";
+import { dims, volume, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, distSegment, dansEncoche, retombeesEvap, basRetombeeAuto } from "./geometrie.js";
 
 export const SOLIDE = { fluide: 0, paroi: 1, evap: 2, cloison: 3, obstacle: 4 };
 
@@ -43,8 +43,10 @@ export function construireGrille(projet, opts) {
     return { i0, i1, j0, j1, k0, k1 };
   };
 
-  // Cloisons : bande d'au moins une cellule, sans fuite en diagonale
-  for (const c of projet.cloisons) {
+  // Cloisons (et retombées des évaporateurs) : bande d'au moins une cellule, sans fuite en diagonale
+  const bas = basRetombeeAuto(projet);
+  G.retombees = projet.evaps.reduce((l, e) => l.concat(retombeesEvap(e, ch, bas)), []);
+  for (const c of projet.cloisons.concat(G.retombees)) {
     const g = cloisonGeo(c, ch), seuil = Math.max(g.ep / 2, 0.5 * Math.max(dx, dy) * (Math.abs(g.ux) + Math.abs(g.uy)));
     const [k0, k1] = plage(g.zb, g.zh, dz, nz);
     const xa = Math.min(c.x0, c.x1) - seuil - dx, xb = Math.max(c.x0, c.x1) + seuil + dx, ya = Math.min(c.y0, c.y1) - seuil - dy, yb = Math.max(c.y0, c.y1) + seuil + dy;

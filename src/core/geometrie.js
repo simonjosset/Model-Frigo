@@ -103,6 +103,35 @@ export function coudeGeo(c, u, p, dv, descente, avance) {
   };
 }
 
+/* Retombée anti-bypass d'un évaporateur : panneau vertical perpendiculaire au soufflage, à `retombeeDist`
+   de la face de soufflage (positif vers l'avant, négatif vers la reprise), du plafond (ou du dessous de
+   l'appareil) jusqu'à `retombeeBas`. Largeur : celle de l'appareil, une valeur, ou d'un mur à l'autre.
+   Renvoyée comme des cloisons partielles (une par côté de soufflage). */
+export const EP_RETOMBEE = 0.05;
+export function basRetombeeAuto(projet) {
+  const H = dims(projet.chambre).H;
+  const hEch = (projet.echelles || []).reduce((m, e) => Math.max(m, +e.H || 0), 0);
+  return Math.min(H - 0.3, hEch > 0 ? hEch + 0.02 : 2);
+}
+export function retombeesEvap(e, ch, basAuto) {
+  if (!e.retombee || e.off) return [];
+  const geo = evapGeo(e, ch), k = dims(ch), out = [];
+  const haut = e.retombeeHaut === "auto" ? (e.coude ? "plafond" : "appareil") : e.retombeeHaut;
+  const zh = haut === "plafond" ? k.H : geo.z.zb, zb = e.retombeeBas == null ? (basAuto != null ? basAuto : 2) : e.retombeeBas;
+  if (zb > zh - 0.05) return [];
+  for (const c of geo.cotes) {
+    const d = geo.dep / 2 + e.retombeeDist, cx = e.x + c.u[0] * d, cy = e.y + c.u[1] * d, p = c.p;
+    let a, b;
+    if (e.retombeeMurs) {
+      // Jusqu'aux murs de part et d'autre
+      const loin = s => { let t = 0; while (t < 200 && dedans(ch, cx + p[0] * (t + 0.02) * s, cy + p[1] * (t + 0.02) * s)) t += 0.02; return t; };
+      a = loin(-1); b = loin(1);
+    } else { const L = (e.retombeeLargeur == null ? e.len : e.retombeeLargeur) / 2; a = L; b = L; }
+    out.push({ id: e.id + "-ret" + c.s, nom: e.nom + " · retombée", x0: cx - p[0] * a, y0: cy - p[1] * a, x1: cx + p[0] * b, y1: cy + p[1] * b, ep: EP_RETOMBEE, zb, zh, evap: e.id, haut });
+  }
+  return out;
+}
+
 /* ---------- Groupe d'échelles ---------- */
 export function echellesGeo(e) {
   const info = echelleInfo(e), res = resistanceEchelle(info);

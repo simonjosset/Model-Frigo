@@ -6,7 +6,7 @@ import { calculerApercu } from "../src/core/apercu.js";
 import { preparer, pas, divergence, demarrer } from "../src/core/cfd.js";
 import { vitesse } from "../src/core/champ.js";
 import { analyser } from "../src/core/analyse.js";
-import { evapGeo } from "../src/core/geometrie.js";
+import { evapGeo, retombeesEvap } from "../src/core/geometrie.js";
 import { simuler } from "../src/core/simulation.js";
 
 const salle = extra => normaliser(Object.assign({ chambre: { longueur: 10, largeur: 6, H: 3.5 }, evaps: [{ nom: "E", x: 0.6, y: 3, dir: 0, len: 1.8, dep: 0.5, eh: 0.5, nf: 2, dv: 0.45, q: 6000, T: 7 }] }, extra || {}));
@@ -110,4 +110,29 @@ test("coude avec avancée horizontale : sortie déportée vers l'avant, encombre
   p.evaps[0].coudeAvance = 20;
   const R = analyser(p, calculerApercu(p));
   assert.ok(R.alertes.some(a => /coude trop long/.test(a.titre)));
+});
+
+test("retombée anti-bypass : panneau devant l'évaporateur, du plafond jusqu'au-dessus des échelles", () => {
+  const p = salle({ echelles: [{ x: 3.2, y: 3, n: 4, rangees: 1, dir: 90 }] });
+  Object.assign(p.evaps[0], { coude: true, retombee: true, retombeeDist: 0.7, retombeeMurs: true });
+  const rts = retombeesEvap(p.evaps[0], p.chambre, 1.9);
+  assert.equal(rts.length, 1);
+  const rt = rts[0];
+  assert.ok(Math.abs(rt.x0 - rt.x1) < 1e-9 && Math.abs(Math.min(rt.y0, rt.y1)) < 0.05 && Math.abs(Math.max(rt.y0, rt.y1) - 6) < 0.05, "d'un mur à l'autre suivant y");
+  assert.equal(rt.zh, 3.5); assert.equal(rt.zb, 1.9);
+  const G = construireGrille(p, { h: 0.2 }), i = Math.floor(rt.x0 / G.dx), j = Math.floor(3 / G.dy);
+  assert.ok(G.solide[G.id(i, j, Math.floor(3 / G.dz))] > 0, "plein en haut");
+  assert.equal(G.solide[G.id(i, j, Math.floor(1 / G.dz))], 0, "libre sous la retombée");
+  const R = analyser(p, calculerApercu(p, { grille: G }));
+  const ar = R.retombees[0];
+  assert.ok(Math.abs(ar.hEchelles - 1.875) < 1e-9 && Math.abs(ar.jour - 0.02) < 1e-6, "bas auto = haut des échelles + 2 cm : " + JSON.stringify(ar));
+  // Retombée trop haute : bypass signalé
+  p.evaps[0].retombeeBas = 2.6;
+  const R2 = analyser(p, calculerApercu(p));
+  assert.ok(R2.alertes.some(a => /bypass au-dessus des échelles/.test(a.titre)));
+  // Retombée au-delà des sorties des coudes : signalée comme mal placée
+  Object.assign(p.evaps[0], { retombeeDist: 2.5, retombeeBas: null });
+  assert.ok(analyser(p, calculerApercu(p)).alertes.some(a => /mal placée/.test(a.titre)));
+  Object.assign(p.evaps[0], { coudeAvance: 2.0, retombeeDist: 1.1 });
+  assert.ok(!analyser(p, calculerApercu(p)).alertes.some(a => /mal placée/.test(a.titre)), "entre sortie et reprise : pas d'alerte");
 });

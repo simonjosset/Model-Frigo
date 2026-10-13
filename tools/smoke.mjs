@@ -110,7 +110,11 @@ await page.fill("#f_coudeAvance", "1"); await page.press("#f_coudeAvance", "Ente
 check("évaporateur : avancée horizontale du coude", await page.evaluate(() => MF.projet().evaps[0].coudeAvance === 1));
 await attendre(page, () => MF.champs.apercu && MF.champs.apercu.R.evaps[0].cotes[0].coude);
 await page.screenshot({ path: path.join(SHOTS, "3c-coudes.png") });
-await page.click("#bAnnuler"); await page.click("#bAnnuler");
+await page.check('input[data-k="retombee"]');
+check("évaporateur : retombée anti-bypass", await page.evaluate(() => MF.projet().evaps[0].retombee === true) && await page.isVisible("#f_retombeeBas"));
+await page.waitForTimeout(500);
+await page.screenshot({ path: path.join(SHOTS, "3d-retombee.png") });
+await page.click("#bAnnuler"); await page.click("#bAnnuler"); await page.click("#bAnnuler");
 check("annuler : coudes retirés", await page.evaluate(() => MF.projet().evaps[0].coude === false));
 
 // Modification après calcul : résultat signalé à relancer

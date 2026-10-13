@@ -1,6 +1,6 @@
 /* Panneaux de propriétés : HTML des formulaires (chambre, objets, réglages) et lecture des saisies. */
 import { CATALOGUE } from "../core/produits.js";
-import { dims, surface, volume, evapGeo, echellesGeo, cloisonGeo, polygone, COINS } from "../core/geometrie.js";
+import { dims, surface, volume, evapGeo, echellesGeo, cloisonGeo, polygone, COINS, retombeesEvap, basRetombeeAuto } from "../core/geometrie.js";
 import { MAILLES } from "../core/modele.js";
 import { couleur } from "../core/champ.js";
 
@@ -115,6 +115,21 @@ function panneauEvap(p, e, R) {
     h += '<p class="hint">Avancée horizontale : longueur de gaine droite entre l\'hélice et le coude (0 = coude directement sur l\'hélice). Elle déporte la sortie vers l\'avant, par exemple pour souffler au-dessus d\'une allée ou d\'une rangée d\'échelles.</p>';
     h += '<p class="hint">Coude à 90° du diamètre de l\'hélice : l\'air ressort vers le bas, à la verticale de la sortie. La portée constructeur sert à régler la force du jet ; la portée horizontale n\'est plus contrôlée.</p>';
   }
+  h += '</div><div class="sec"><h4>Retombée anti-bypass</h4><label class="chk"><input type="checkbox" data-k="retombee" data-type="chk"' + (e.retombee ? " checked" : "") + '> Retombée au niveau de l\'évaporateur</label>';
+  if (e.retombee) {
+    const basA = basRetombeeAuto(p), rts = retombeesEvap(Object.assign({}, e, { off: false }), p.chambre, basA), rt = rts[0];
+    h += '<div class="grid" style="margin-top:8px">' + sel(e, "retombeeHaut", "Part de", [["auto", "Auto (" + (e.coude ? "plafond" : "sous l'appareil") + ")"], ["plafond", "Plafond"], ["appareil", "Dessous de l'appareil"]], { w2: true }) +
+      num(e, "retombeeBas", "Bas de la retombée", "m du sol", { vide: "Auto : " + aff(basA, 2) }) +
+      num(e, "retombeeDist", "Position / face de soufflage", "m") +
+      num(e, "retombeeLargeur", "Largeur", "m", { vide: e.retombeeMurs ? "Mur à mur" : "Auto : " + aff(e.len, 2) }) + "<div></div></div>";
+    h += '<label class="chk"><input type="checkbox" data-k="retombeeMurs" data-type="chk"' + (e.retombeeMurs ? " checked" : "") + '> D\'un mur à l\'autre</label>';
+    h += '<p class="hint">Panneau vertical qui force l\'air à passer à travers les échelles au lieu de revenir à l\'évaporateur par-dessus. Position : 0 = au ras de la face de soufflage, positif vers l\'avant, négatif vers la reprise. Bas en automatique : haut des échelles les plus hautes + 2 cm. Pour être utile, elle doit se trouver entre la sortie du soufflage et la reprise, au-dessus de la rangée d\'échelles. Un jour plus petit qu\'une maille de calcul (10 à 20 cm) est vu comme fermé.' + (rt ? "" : ' <b style="color:var(--yellow)">Retombée nulle : le bas est au-dessus du haut.</b>') + "</p>";
+    const ar = R && (R.retombees || []).find(x => x.evap === e.id);
+    if (rt) h += info([["Hauteur de la retombée", aff(rt.zh - rt.zb, 2) + " m (de " + aff(rt.zh, 2) + " à " + aff(rt.zb, 2) + " m)"], ["Largeur", aff(Math.hypot(rt.x1 - rt.x0, rt.y1 - rt.y0), 2) + " m"],
+      ar && ar.jour != null ? ["Jour au-dessus des échelles", aff(ar.jour * 100, 0) + " cm"] : null,
+      ar && ar.partBypass != null ? ["Air passant par-dessus les produits", aff(ar.partBypass * 100, 0) + " %"] : null]);
+  }
+  h += '</div><div class="sec"><h4>Fonctionnement</h4>';
   const ev = R && R.evaps.find(x => x.id === e.id);
   const lignes = [["Débit par ventilateur", fr(e.q / g.cotes.length / nf, 0) + " m³/h"], ["Vitesse dans l'hélice (approx.)", fr(vS, 1) + " m/s"], ["Distance au plafond", fr(g.z.drop, 2) + " m"]];
   if (ev) ev.cotes.forEach((c, i) => {
@@ -246,7 +261,7 @@ export function panneauReglages(p, a) {
 }
 
 export function resumeObjet(liste, o) {
-  if (liste === "evaps") return fr(o.q, 0) + " m³/h · " + fr(o.T, 0) + " m" + (o.type === "double" ? " · double flux" : "") + (o.coude ? " · coudes ↓" : "");
+  if (liste === "evaps") return fr(o.q, 0) + " m³/h · " + fr(o.T, 0) + " m" + (o.type === "double" ? " · double flux" : "") + (o.coude ? " · coudes ↓" : "") + (o.retombee ? " · retombée" : "");
   if (liste === "echelles") { const g = echellesGeo(o); return g.total + " éch. · " + fr(g.total * g.info.nb, 0) + " produits"; }
   if (liste === "cloisons") { return "L " + fr(Math.hypot(o.x1 - o.x0, o.y1 - o.y0), 2) + " m" + (o.zh != null || o.zb > 0 ? " · partielle" : ""); }
   if (liste === "obstacles") return fr(o.L, 2) + " × " + fr(o.l, 2) + " × " + fr(o.h, 2) + " m" + (o.poreux > 0.01 ? " · ajouré" : "");
