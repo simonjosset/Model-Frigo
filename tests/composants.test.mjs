@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { normaliser, batimentExemple, ajouter } from "../src/core/modele.js";
-import { ctaGeo, boucheGeo, gaineTrace, gaineSection, gaineMetres, metresGaines, routeOrtho, texteSection, SECTIONS_CTA } from "../src/core/composants.js";
+import { ctaGeo, boucheGeo, gaineTrace, gaineSection, gaineMetres, metresGaines, routeOrtho, texteSection, SECTIONS_CTA, gaineEnveloppe, raccordBout } from "../src/core/composants.js";
 import { pointsAccroche } from "../src/core/cotes.js";
 import { construireGrille } from "../src/core/grille.js";
 
@@ -64,4 +64,50 @@ test("bâtiment d'exemple : CTA, plénum, gaines raccordées, bouches ; accroche
   const q = normaliser({ chambre: { longueur: 9, largeur: 6.5, H: 3.6 } }), sans = construireGrille(q, { h: 0.25 }).solide;
   ajouter(q, "ctas", { x: 4, y: 3 }); ajouter(q, "gaines", {});
   assert.deepEqual(construireGrille(q, { h: 0.25 }).solide, sans);
+});
+
+/* Deux anneaux identiques à l'ordre près (raccord sans décalage) */
+function memesSommets(a, b) {
+  assert.equal(a.length, b.length);
+  a.forEach(p => assert.ok(b.some(q => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) < 1e-9), "sommet sans vis-à-vis : " + p));
+}
+test("gaine rectangulaire : coudes coupés d'onglet, raccords sans décalage, largeur horizontale", () => {
+  const sec = { forme: "rect", a: 600, b: 300 };
+  const env = gaineEnveloppe([[0, 0, 3], [4, 0, 3], [6, 0, 3], [6, 5, 3], [6, 5, 1]], sec);
+  assert.equal(env.rond, false);
+  assert.equal(env.troncons.length, 3, "points alignés fusionnés");
+  const [t0, t1, t2] = env.troncons;
+  memesSommets(t0.b, t1.a); memesSommets(t1.b, t2.a);
+  // Tronçon horizontal : 0,30 m de haut, 0,60 m de large en travers
+  const zs = t0.a.map(p => p[2]), ys = t0.a.map(p => p[1]);
+  near(Math.max(...zs) - Math.min(...zs), 0.3, 1e-9); near(Math.max(...ys) - Math.min(...ys), 0.6, 1e-9);
+  // Coude horizontal à 90° : angle extérieur au point (6,3 ; -0,3), intérieur à (5,7 ; 0,3)
+  assert.ok(t0.b.some(p => Math.abs(p[0] - 6.3) < 1e-9 && Math.abs(p[1] + 0.3) < 1e-9));
+  assert.ok(t0.b.some(p => Math.abs(p[0] - 5.7) < 1e-9 && Math.abs(p[1] - 0.3) < 1e-9));
+  // Descente : garde l'orientation du tronçon précédent (0,60 en x, 0,30 en y), bout bas coupé droit à z = 1
+  const xs = t2.b.map(p => p[0]), y2 = t2.b.map(p => p[1]);
+  near(Math.max(...xs) - Math.min(...xs), 0.6, 1e-9); near(Math.max(...y2) - Math.min(...y2), 0.3, 1e-9);
+  t2.b.forEach(p => near(p[2], 1, 1e-9));
+  // Gaine ronde : anneaux raccordés aussi
+  const r = gaineEnveloppe([[0, 0, 3], [4, 0, 3], [4, 0, 1]], { forme: "rond", d: 400 });
+  assert.equal(r.rond, true); memesSommets(r.troncons[0].b, r.troncons[1].a);
+});
+test("gaine : raccord bout à bout avec une autre gaine, onglet ou botte", () => {
+  const A = { id: "a", forme: "rect", a: 400, b: 200, points: [[0, 0, 3], [4, 0, 3]] }, B = { id: "b", forme: "rect", a: 400, b: 200, points: [[4, 0, 3], [4, 3, 3]] };
+  const C = { id: "c", forme: "rect", a: 400, b: 200, points: [[2, 0, 3], [2, -3, 3]] };
+  const d = raccordBout([A, B, C], "b", B.points[0]);
+  assert.deepEqual(d.u, [1, 0, 0]);
+  const fin = raccordBout([A, B, C], "a", A.points[1]);
+  assert.deepEqual(fin.u, [0, -1, 0]);
+  const ea = gaineEnveloppe(A.points, A, null, { u: fin.u.map(x => -x), r: fin.r }), eb = gaineEnveloppe(B.points, B, d, null);
+  memesSommets(ea.troncons[0].b, eb.troncons[0].a);
+  assert.equal(ea.troncons[0].capB, false); assert.equal(ea.troncons[0].capA, true);
+  assert.equal(raccordBout([A, B, C], "c", C.points[0]), null, "départ au milieu d'une gaine : pas d'onglet");
+  // Descente (orientée sur le tronçon en y) puis départ en x : sections tournées, raccord en botte
+  const sec = { forme: "rect", a: 800, b: 300 };
+  const env = gaineEnveloppe([[4, 0, 2.5], [4, 4, 2.5], [4, 4, 0.8], [1.5, 4, 0.8]], sec);
+  const bas = env.troncons[1], dep = env.troncons[2];
+  assert.equal(bas.capB, true); assert.equal(dep.capA, true);
+  bas.b.forEach(p => near(p[2], 0.65, 1e-9, "descente jusqu'au dessous du départ"));
+  dep.a.forEach(p => near(p[0], 4.4, 1e-9, "départ au ras de la paroi arrière de la descente"));
 });

@@ -8,7 +8,7 @@ import {
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { dims, polygone, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo, etirerRetombee, porteCloison, pieceGeo, localGeo, localPolygone, mursLocaux, porteSurMurs, emprise } from "../core/geometrie.js";
 import { projetVisible, LISTES_PROJET } from "../core/modele.js";
-import { ctaGeo, plenumGeo, boucheGeo, TYPES_BOUCHE, gaineTrace, gaineSection, gaineEncombrement, texteSection, routeOrtho } from "../core/composants.js";
+import { ctaGeo, plenumGeo, boucheGeo, TYPES_BOUCHE, gaineTrace, gaineSection, gaineEnveloppe, raccordBout, texteSection, routeOrtho } from "../core/composants.js";
 import { pointsAccroche, mesure } from "../core/cotes.js";
 import { produitsLocaux, ROUES } from "../core/produits.js";
 import { creerFlux } from "./flux.js";
@@ -453,23 +453,41 @@ export function creerVue(conteneur, cb) {
     const g = new Group(), b = boucheGeo(o).box, m = boite(b.x1 - b.x0, b.y1 - b.y0, b.z1 - b.z0, mat((TYPES_BOUCHE[o.type] || TYPES_BOUCHE.soufflage).couleur), (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, (b.z0 + b.z1) / 2);
     g.add(m); aretes(g, m); return g;
   }
-  /* Gaine : un tronçon par segment (boîte pour le rectangulaire, cylindre pour le rond et le textile), raccord à chaque coude */
+  /* Gaine : un tronçon par segment, coupé d'onglet aux coudes (et aux raccords bout à bout avec une autre gaine), en botte si les sections ne se correspondent pas */
   function construireGaine(o) {
-    const g = new Group(), sec = gaineSection(o, projet.reglages), e = gaineEncombrement(sec), t = gaineTrace(o.points);
-    const m0 = o.forme === "textile" ? M.textile : M.galva, rond = sec.forme !== "rect";
-    t.seg.forEach(s => {
-      const c = new Vector3((s.a[0] + s.b[0]) / 2, (s.a[1] + s.b[1]) / 2, (s.a[2] + s.b[2]) / 2);
-      let m;
-      if (rond) { m = new Mesh(new CylinderGeometry(e.w / 2, e.w / 2, s.L, 20), m0); m.position.copy(c); m.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), new Vector3(s.u[0], s.u[1], s.u[2])); }
-      else if (Math.abs(s.u[2]) > 0.99) m = boite(e.w, e.h, s.L, m0, c.x, c.y, c.z);
-      else { m = boite(s.L, e.w, e.h, m0, c.x, c.y, c.z); m.rotation.z = Math.atan2(s.u[1], s.u[0]); }
-      g.add(m); if (!rond) aretes(g, m);
-    });
-    o.points.slice(1, -1).forEach(q => {
-      const j = rond ? new Mesh(new SphereGeometry(e.w / 2, 16, 12), m0) : boite(e.w, e.w, e.h, m0, 0, 0, 0);
-      j.position.set(q[0], q[1], q[2]); g.add(j);
+    const g = new Group(), sec = gaineSection(o, projet.reglages), p = o.points || [];
+    const m0 = o.forme === "textile" ? M.textile : M.galva;
+    if (p.length < 2) return g;
+    const avant = raccordBout(projet.gaines, o.id, p[0], projet.reglages), r = raccordBout(projet.gaines, o.id, p[p.length - 1], projet.reglages);
+    const env = gaineEnveloppe(p, sec, avant, r && { u: r.u.map(x => -x), r: r.r });
+    env.troncons.forEach(t => {
+      const m = new Mesh(geoTroncon(t, env.rond, t.capA, t.capB), m0);
+      g.add(m); if (!env.rond) aretes(g, m);
     });
     return g;
+  }
+  /* Tronçon de gaine : faces latérales (plates ou lissées pour le rond), bouchons aux extrémités libres */
+  function geoTroncon(t, lisse, capA, capB) {
+    const pos = [], nor = [], N = t.c.length, u = t.u;
+    const tri = (a, b, c, na, nb, nc, ref) => {
+      const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+      const cr = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+      if (cr[0] * ref[0] + cr[1] * ref[1] + cr[2] * ref[2] < 0) { [b, c] = [c, b]; [nb, nc] = [nc, nb]; }
+      pos.push(...a, ...b, ...c); nor.push(...na, ...nb, ...nc);
+    };
+    const unit = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+    for (let k = 0; k < N; k++) {
+      const k2 = (k + 1) % N, a0 = t.a[k], a1 = t.a[k2], b0 = t.b[k], b1 = t.b[k2];
+      const nf = unit([t.c[k][0] + t.c[k2][0], t.c[k][1] + t.c[k2][1], t.c[k][2] + t.c[k2][2]]);
+      const n0 = lisse ? unit(t.c[k]) : nf, n1 = lisse ? unit(t.c[k2]) : nf;
+      tri(a0, a1, b1, n0, n1, n1, nf); tri(a0, b1, b0, n0, n1, n0, nf);
+    }
+    const bouchon = (r, n) => { const c = r.reduce((s, q) => [s[0] + q[0] / N, s[1] + q[1] / N, s[2] + q[2] / N], [0, 0, 0]); for (let k = 0; k < N; k++) tri(c, r[k], r[(k + 1) % N], n, n, n, n); };
+    if (capA) bouchon(t.a, [-u[0], -u[1], -u[2]]);
+    if (capB) bouchon(t.b, u);
+    const geo = new BufferGeometry();
+    geo.setAttribute("position", new Float32BufferAttribute(pos, 3)); geo.setAttribute("normal", new Float32BufferAttribute(nor, 3));
+    return geo;
   }
   const CONSTR = { evaps: construireEvap, echelles: construireEchelles, cloisons: construireCloison, obstacles: construireObstacle, portes: construirePorte, deflecteurs: construireDeflecteur, pieces: construirePiece, personnes: construirePersonne, locaux: construireLocal, ctas: construireCta, plenums: construirePlenum, bouches: construireBouche, gaines: construireGaine };
 
@@ -821,6 +839,7 @@ export function creerVue(conteneur, cb) {
     /* Reconstruit un seul objet (déplacement) */
     majObjet(liste, o) {
       construireObjet(liste, o);
+      if (liste === "gaines") (projet.gaines || []).forEach(d => { if (d.id !== o.id) construireObjet("gaines", d); }); // raccords bout à bout
       if (projet.type === "batiment") { construireChambre(); if (liste === "locaux") (projet.portes || []).forEach(d => construireObjet("portes", d)); } majPickables(); construireEtiquettes(); majSelection(); colorerProduits(); accroches = null; demander();
     },
     selection(id) { selId = id || null; majSelection(); },
