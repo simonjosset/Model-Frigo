@@ -1,7 +1,7 @@
 /* Panneaux de propriétés : HTML des formulaires (chambre, objets, réglages) et lecture des saisies. */
 import { CATALOGUE } from "../core/produits.js";
 import { dims, surface, volume, evapGeo, echellesGeo, cloisonGeo, porteCloison, MURS_PIECE, polygone, COINS, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "../core/geometrie.js";
-import { MAILLES } from "../core/modele.js";
+import { MAILLES, TYPES_PROJET } from "../core/modele.js";
 import { couleur } from "../core/champ.js";
 
 export function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
@@ -44,9 +44,10 @@ function info(lignes) { return '<div class="info">' + lignes.map(l => l ? (l.tot
 
 /* ---------- Chambre ---------- */
 export function panneauChambre(p) {
-  const ch = p.chambre, k = dims(ch), c = x => ({ cle: "chambre." + x });
-  let h = '<h2><input data-k="projet.nom" data-type="txt" value="' + esc(p.nom) + '" aria-label="Nom du projet" maxlength="80"></h2><p class="sous">Projet · géométrie de la chambre froide</p>';
-  h += '<div class="sec"><h4>Chambre</h4><div class="grid">' + sel(ch, "forme", "Forme", [["rect", "Rectangulaire"], ["L", "En L"]], { w2: true, cle: "chambre.forme" });
+  const ch = p.chambre, k = dims(ch), c = x => ({ cle: "chambre." + x }), bat = p.type === "batiment";
+  let h = '<h2><input data-k="projet.nom" data-type="txt" value="' + esc(p.nom) + '" aria-label="Nom du projet" maxlength="80"></h2><p class="sous">Projet · ' + (bat ? "enveloppe du bâtiment (hall principal)" : "géométrie de la chambre froide") + "</p>";
+  h += '<div class="sec"><h4>Type de projet</h4><div class="grid">' + sel(p, "type", "Type", Object.keys(TYPES_PROJET).map(t => [t, TYPES_PROJET[t] + (t === "batiment" ? " (implantation, sans calcul des flux)" : " (flux d\'air)")]), { w2: true, cle: "projet.type" }) + "</div></div>";
+  h += '<div class="sec"><h4>' + (bat ? "Hall (enveloppe du bâtiment)" : "Chambre") + '</h4><div class="grid">' + sel(ch, "forme", "Forme", [["rect", "Rectangulaire"], ["L", "En L"]], { w2: true, cle: "chambre.forme" });
   h += num(ch, "longueur", "Longueur totale (gauche ↔ droite)", "m", c("longueur")) + num(ch, "largeur", "Largeur totale (avant ↔ fond)", "m", c("largeur"));
   h += num(ch, "H", "Hauteur sous plafond", "m", c("H")) + num(ch, "Ti", "Température", "°C", { dec: 0, cle: "chambre.Ti" }) + "</div>";
   h += '<div class="plan">' + planChambre(ch) + "</div>";
@@ -58,7 +59,7 @@ export function panneauChambre(p) {
     h += '<div class="grid" style="margin-top:10px">' + num(ch, "coinLong", "Longueur du coin (gauche ↔ droite)", "m", c("coinLong")) + num(ch, "coinLarg", "Largeur du coin (avant ↔ fond)", "m", c("coinLarg")) + "</div></div>";
   }
   h += info([["Surface au sol", fr(surface(ch), 1) + " m²"], ["Volume", fr(volume(ch), 1) + " m³"]]);
-  h += '<p class="note">« Avant » est le côté vu de face dans la 3D (bouton Face). La température sert de repère : le calcul des flux est isotherme (pas de chute du jet froid ni de convection naturelle).</p>';
+  h += '<p class="note">« Avant » est le côté vu de face dans la 3D (bouton Face). ' + (bat ? "Bâtiment : implantation en 3D (locaux, machines, portes, pièces voisines), sans calcul des flux d\'air. Les éléments de chambre froide (évaporateurs, échelles…) sont gardés mais masqués." : "La température sert de repère : le calcul des flux est isotherme (pas de chute du jet froid ni de convection naturelle).") + "</p>";
   return h;
 }
 
@@ -214,6 +215,17 @@ function panneauObstacle(p, o) {
   return h;
 }
 
+/* Local dans le bâtiment */
+function panneauLocal(p, o) {
+  let h = titre(o, "Local · " + fr(o.L * o.l, 1) + " m²");
+  h += '<div class="sec"><h4>Dimensions</h4><div class="grid">' + num(o, "L", "Longueur (gauche ↔ droite)", "m") + num(o, "l", "Largeur (avant ↔ fond)", "m") +
+    num(o, "H", "Hauteur sous plafond", "m") + num(o, "T", "Température", "°C", { dec: 0 }) + num(o, "x", "Centre x", "m") + num(o, "y", "Centre y", "m") + "</div>";
+  h += '<label class="chk"><input type="checkbox" data-k="plafond" data-type="chk"' + (o.plafond ? " checked" : "") + "> Plafond (faux plafond ou dalle)</label>";
+  h += info([["Surface", fr(o.L * o.l, 1) + " m²"], ["Volume", fr(o.L * o.l * o.H, 1) + " m³"]]);
+  h += '<p class="hint">Faites glisser le local pour le placer dans le hall, R pour le tourner d\'un quart de tour. Les cotes s\'accrochent à ses angles.</p></div>';
+  return h + actions("locaux", o);
+}
+
 /* Personne : repère d'échelle (hors calcul) */
 function panneauPersonne(p, o) {
   let h = titre(o, "Repère d'échelle · décor, hors calcul");
@@ -286,6 +298,7 @@ export function panneauObjet(p, liste, o, R, opts) {
   if (liste === "cloisons") return panneauCloison(p, o);
   if (liste === "pieces") return panneauPiece(p, o);
   if (liste === "personnes") return panneauPersonne(p, o);
+  if (liste === "locaux") return panneauLocal(p, o);
   if (liste === "obstacles") return panneauObstacle(p, o);
   return panneauPorte(p, o);
 }
@@ -313,6 +326,7 @@ export function resumeObjet(liste, o) {
   if (liste === "cloisons") { return "L " + fr(Math.hypot(o.x1 - o.x0, o.y1 - o.y0), 2) + " m" + (o.zh != null || o.zb > 0 ? " · partielle" : "") + (o.porte ? " · porte" + (o.porteOuverte ? " ouverte" : " fermée") : ""); }
   if (liste === "obstacles") return fr(o.L, 2) + " × " + fr(o.l, 2) + " × " + fr(o.h, 2) + " m" + (o.poreux > 0.01 ? " · ajouré" : "");
   if (liste === "personnes") return fr(o.taille, 2) + " m";
+  if (liste === "locaux") return fr(o.L, 1) + " × " + fr(o.l, 1) + " × " + fr(o.H, 1) + " m · " + (o.T > 0 ? "+" : "") + fr(o.T, 0) + " °C";
   if (liste === "pieces") return fr(o.L, 2) + " × " + fr(o.l, 2) + " m · " + (o.T > 0 ? "+" : "") + fr(o.T, 0) + " °C";
   if (liste === "deflecteurs") return "R " + fr(o.rayon, 2) + " m · L " + fr(o.longueur, 2) + " m · " + (o.angle === "sol" ? "sol" : "plafond");
   return fr(o.w, 2) + " × " + fr(o.h, 2) + " m";

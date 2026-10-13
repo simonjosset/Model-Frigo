@@ -250,6 +250,7 @@ export function boiteObjet(liste, o, ch) {
   if (liste === "echelles") return echellesGeo(o).box;
   if (liste === "obstacles") return obstacleGeo(o).box;
   if (liste === "personnes") return personneGeo(o).box;
+  if (liste === "locaux") return localGeo(o).box;
   return null;
 }
 
@@ -257,6 +258,12 @@ export function boiteObjet(liste, o, ch) {
 export function personneGeo(o) {
   const u = dirVec(o.dir), d = demi(u, 0.3 * o.taille / 1.75, 0.5 * o.taille / 1.75);
   return { u, box: { x0: o.x - d.hx, x1: o.x + d.hx, y0: o.y - d.hy, y1: o.y + d.hy, z0: 0, z1: o.taille } };
+}
+
+/* ---------- Local dans le bâtiment : rectangle centré en (x, y), L suivant x, l suivant y ---------- */
+export const EP_LOCAL = 0.1;
+export function localGeo(o) {
+  return { box: { x0: o.x - o.L / 2, x1: o.x + o.L / 2, y0: o.y - o.l / 2, y1: o.y + o.l / 2, z0: 0, z1: o.H } };
 }
 
 /* ---------- Pièce voisine (décor) ---------- */

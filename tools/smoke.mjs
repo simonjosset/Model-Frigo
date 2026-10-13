@@ -238,6 +238,31 @@ await page.locator("#vue3d canvas").focus().catch(() => {});
 await page.keyboard.press("ArrowLeft");
 check("déplacement au clavier", await page.evaluate(x => Math.abs(MF.projet().evaps[0].x - (x - 0.1)) < 1e-6, x0));
 
+// Bâtiment : exemple agroalimentaire, outils de flux masqués, local ajouté, retour au projet de chambre
+const idChambre = await page.evaluate(() => MF.store.idCourant());
+await page.click("#bProjets"); await page.click("#projBatimentEx");
+check("bâtiment : exemple chargé (hall, 3 locaux, quai)", await page.evaluate(() => { const p = MF.projet(); return p.type === "batiment" && p.locaux.length === 3 && p.pieces[0].nom === "Quai"; }));
+check("bâtiment : outils de flux masqués", await page.isHidden("#bCalcul") && await page.isHidden('[data-aff="particules"]') && await page.isHidden(".leg") && await page.isVisible("#bCote"));
+check("bâtiment : listes locaux et machines, pas d'évaporateurs", await page.isVisible('[data-ajout="locaux"]') && await page.isHidden('[data-ajout="evaps"]') && /Machines/.test(await page.textContent("#listes")));
+check("bâtiment : étiquettes des locaux", /Bureaux · \+20 °C/.test(await page.textContent(".vue3d-etiquettes")));
+await page.click('[data-ajout="locaux"]');
+await page.fill("#f_L", "10"); await page.press("#f_L", "Enter");
+check("bâtiment : local ajouté et dimensionné", await page.evaluate(() => MF.projet().locaux.length === 4 && MF.projet().locaux[3].L === 10));
+await page.click('[data-tab="res"]');
+check("bâtiment : récapitulatif des surfaces", /Récapitulatif/.test(await page.textContent("#pane-res")) && /Hall \(enveloppe\)/.test(await page.textContent("#pane-res")) && (await page.textContent('[data-tab="res"]')) === "Récapitulatif");
+check("bâtiment : pas de calcul des flux lancé", await page.evaluate(() => !MF.calculs.enCours()));
+await page.waitForTimeout(400);
+await page.screenshot({ path: path.join(SHOTS, "4b-batiment.png") });
+// Changement de type depuis le panneau du projet, puis annulation
+await page.click('[data-sel="chambre"]');
+await page.selectOption("#f_projet\\.type", "chambre");
+check("type changé en chambre froide : outils de flux revenus", await page.evaluate(() => MF.projet().type === "chambre") && await page.isVisible("#bCalcul") && await page.isHidden('[data-ajout="locaux"]'));
+await page.click("#bAnnuler");
+check("annuler : retour au bâtiment", await page.evaluate(() => MF.projet().type === "batiment") && await page.isHidden("#bCalcul"));
+await page.evaluate(id => MF.store.ouvrir(id), idChambre);
+await page.reload();
+await attendre(page, () => window.MF && MF.champs.apercu);
+
 // Rechargement : le projet est conservé
 await page.waitForTimeout(400);
 await page.reload();
@@ -245,8 +270,9 @@ await attendre(page, () => window.MF && MF.champs.apercu);
 check("projet conservé après rechargement (cloison)", await page.evaluate(() => MF.projet().cloisons.length === 1 && MF.projet().cloisons[0].ep === 0.2));
 
 // Export puis import
+const nAvant = await page.evaluate(() => MF.store.liste().length);
 const n = await page.evaluate(() => { const t = MF.store.exporter(false); return MF.store.importer(t); });
-check("export puis import d'un projet", n === 1 && await page.evaluate(() => MF.store.liste().length === 2));
+check("export puis import d'un projet", n === 1 && await page.evaluate(k => MF.store.liste().length === k + 1, nAvant));
 
 // Thème clair
 await page.click("#bTheme"); await page.waitForTimeout(300);

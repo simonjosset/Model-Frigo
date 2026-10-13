@@ -19,11 +19,19 @@ export const TYPES = {
   portes: { seul: "Porte", plusieurs: "Portes", prefixe: "Porte " },
   deflecteurs: { seul: "Déflecteur d'angle", plusieurs: "Déflecteurs d'angle", prefixe: "Déflecteur " },
   pieces: { seul: "Pièce voisine", plusieurs: "Pièces voisines", prefixe: "Pièce " },
-  personnes: { seul: "Personne", plusieurs: "Personnes", prefixe: "Personne " }
+  personnes: { seul: "Personne", plusieurs: "Personnes", prefixe: "Personne " },
+  locaux: { seul: "Local", plusieurs: "Locaux", prefixe: "Local " }
 };
-export const LISTES = ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces", "personnes"];
+export const LISTES = ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces", "personnes", "locaux"];
 /* Objets de décor : hors maillage, aperçu et analyse */
-export const DECOR = ["pieces", "personnes"];
+export const DECOR = ["pieces", "personnes", "locaux"];
+/* Types de projet : chambre froide (flux d'air) ou bâtiment (implantation, sans calcul des flux).
+   La « chambre » est l'enveloppe : la chambre froide, ou le hall principal du bâtiment. */
+export const TYPES_PROJET = { chambre: "Chambre froide", batiment: "Bâtiment" };
+export const LISTES_PROJET = {
+  chambre: ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces", "personnes"],
+  batiment: ["locaux", "obstacles", "portes", "pieces", "personnes"]
+};
 
 export const MAILLES = {
   rapide: { nom: "Rapide", cellules: 40000 },
@@ -72,21 +80,60 @@ export function pieceDefaut(ch) {
 export function personneDefaut(ch) {
   return { x: Math.min(1.5, ch.longueur / 2), y: Math.min(1.2, ch.largeur / 2), dir: 90, taille: 1.75 };
 }
-const DEFAUTS = { evaps: evapDefaut, echelles: echellesDefaut, cloisons: cloisonDefaut, obstacles: obstacleDefaut, portes: porteDefaut, deflecteurs: deflecteurDefaut, pieces: pieceDefaut, personnes: personneDefaut };
+/* Local à l'intérieur du bâtiment (bureaux, local technique, vestiaires…) : murs, plafond, température */
+export function localDefaut(ch) {
+  return { x: Math.min(4, ch.longueur / 2), y: Math.min(3, ch.largeur / 2), L: Math.min(8, ch.longueur), l: Math.min(6, ch.largeur), H: Math.min(3, ch.H), T: 20, plafond: true };
+}
+const DEFAUTS = { evaps: evapDefaut, echelles: echellesDefaut, cloisons: cloisonDefaut, obstacles: obstacleDefaut, portes: porteDefaut, deflecteurs: deflecteurDefaut, pieces: pieceDefaut, personnes: personneDefaut, locaux: localDefaut };
 
 /* Projet d'exemple : chambre de stockage de glaces (nom de code uniquement) */
 export function projetExemple() {
   const ch = chambreDefaut();
   const p = {
-    format: FORMAT, version: VERSION, nom: "Projet Alpha", maj: Date.now(),
+    format: FORMAT, version: VERSION, type: "chambre", nom: "Projet Alpha", maj: Date.now(),
     chambre: ch, reglages: reglagesDefaut(),
-    evaps: [], echelles: [], cloisons: [], obstacles: [], portes: [], deflecteurs: [], pieces: [], personnes: [], cotes: []
+    evaps: [], echelles: [], cloisons: [], obstacles: [], portes: [], deflecteurs: [], pieces: [], personnes: [], locaux: [], cotes: []
   };
   ajouter(p, "evaps", { x: 4.5, y: 5.8, dir: 270, q: 9000, T: 8, dv: 0.45 });
   const a = ajouter(p, "echelles", { x: 4.2, y: 3.1, n: 7, rangees: 2 });
   a.nom = "Échelles glace";
   ajouter(p, "portes", { x: 7.6, y: 0 });
   ajouter(p, "pieces", { nom: "Sas", x: 4.5, y: -1.5, L: 9, l: 3, H: 3.6, T: 5 });
+  return p;
+}
+
+/* Copie du projet où seules les listes de son type sont remplies (affichage, accroche des cotes) */
+export function projetVisible(p) {
+  const q = Object.assign({}, p), l = LISTES_PROJET[p.type] || LISTES_PROJET.chambre;
+  LISTES.forEach(x => { if (l.indexOf(x) < 0) q[x] = []; });
+  return q;
+}
+
+/* Bâtiment d'exemple : hall agroalimentaire avec locaux, lignes, quai (nom de code uniquement) */
+export function batimentExemple() {
+  const ch = Object.assign(chambreDefaut(), { longueur: 48, largeur: 30, H: 8, Ti: 12 });
+  const p = {
+    format: FORMAT, version: VERSION, type: "batiment", nom: "Projet Bêta", maj: Date.now(),
+    chambre: ch, reglages: reglagesDefaut(),
+    evaps: [], echelles: [], cloisons: [], obstacles: [], portes: [], deflecteurs: [], pieces: [], personnes: [], locaux: [], cotes: []
+  };
+  ajouter(p, "locaux", { nom: "Local technique", x: 4, y: 26, L: 8, l: 8, H: 4, T: 20 });
+  ajouter(p, "locaux", { nom: "Bureaux", x: 14, y: 27, L: 12, l: 6, H: 3, T: 20 });
+  ajouter(p, "locaux", { nom: "Vestiaires", x: 25, y: 27, L: 10, l: 6, H: 3, T: 20 });
+  ajouter(p, "obstacles", { nom: "Ligne 1", x: 20, y: 14, L: 16, l: 2, h: 1.8 });
+  ajouter(p, "obstacles", { nom: "Ligne 2", x: 20, y: 8, L: 16, l: 2, h: 1.8 });
+  ajouter(p, "portes", { nom: "Porte quai 1", x: 34, y: 0, w: 3, h: 4 });
+  ajouter(p, "portes", { nom: "Porte quai 2", x: 42, y: 0, w: 3, h: 4 });
+  ajouter(p, "pieces", { nom: "Quai", x: 24, y: -4, L: 48, l: 8, H: 6, T: 5 });
+  ajouter(p, "personnes", { x: 10, y: 10 });
+  return p;
+}
+/* Bâtiment vide : un hall de 40 × 25 × 8 m */
+export function batimentVide(nom) {
+  const p = batimentExemple();
+  p.nom = nom || "Bâtiment"; p.chambre = Object.assign(chambreDefaut(), { longueur: 40, largeur: 25, H: 8, Ti: 15 });
+  LISTES.forEach(l => { p[l] = []; });
+  ajouter(p, "personnes", { x: 5, y: 5 });
   return p;
 }
 
@@ -175,6 +222,9 @@ export function normaliserObjet(liste, o, ch) {
   } else if (liste === "pieces") {
     r.x = n(r.x, d.x, -500, 500); r.y = n(r.y, d.y, -500, 500); r.L = n(r.L, d.L, 0.5, 300); r.l = n(r.l, d.l, 0.5, 300);
     r.H = n(r.H, d.H, 1, 30); r.T = n(r.T, d.T, -60, 60);
+  } else if (liste === "locaux") {
+    r.x = n(r.x, d.x); r.y = n(r.y, d.y); r.L = n(r.L, d.L, 0.5, 300); r.l = n(r.l, d.l, 0.5, 300);
+    r.H = n(r.H, d.H, 1, 30); r.T = n(r.T, d.T, -60, 60); r.plafond = r.plafond !== false;
   } else if (liste === "personnes") {
     r.x = n(r.x, d.x); r.y = n(r.y, d.y); r.dir = angle(r.dir); r.taille = n(r.taille, 1.75, 0.5, 2.3);
   }
@@ -199,7 +249,7 @@ export function normaliser(p) {
   ch.coinLong = n(ch.coinLong, 3, 0.1, Math.max(0.1, ch.longueur - 0.3)); ch.coinLarg = n(ch.coinLarg, 3, 0.1, Math.max(0.1, ch.largeur - 0.3));
   ch.Ti = n(ch.Ti, -25, -60, 30);
   const out = {
-    format: FORMAT, version: VERSION,
+    format: FORMAT, version: VERSION, type: p.type === "batiment" ? "batiment" : "chambre",
     nom: String(p.nom || "Projet").slice(0, 80), maj: n(p.maj, Date.now()),
     chambre: ch, reglages: Object.assign(reglagesDefaut(), p.reglages || {})
   };

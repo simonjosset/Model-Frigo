@@ -6,7 +6,8 @@ import {
   MeshLambertMaterial, MeshBasicMaterial, LineBasicMaterial, LineSegments, InstancedMesh, Object3D, Plane, DoubleSide, MOUSE, TOUCH, EdgesGeometry, Box3, TubeGeometry, QuadraticBezierCurve3
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { dims, polygone, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo, etirerRetombee, porteCloison, pieceGeo } from "../core/geometrie.js";
+import { dims, polygone, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo, etirerRetombee, porteCloison, pieceGeo, localGeo, EP_LOCAL } from "../core/geometrie.js";
+import { projetVisible, LISTES_PROJET } from "../core/modele.js";
 import { pointsAccroche, mesure } from "../core/cotes.js";
 import { produitsLocaux, ROUES } from "../core/produits.js";
 import { creerFlux } from "./flux.js";
@@ -107,6 +108,8 @@ export function creerVue(conteneur, cb) {
     M.poignee = new MeshBasicMaterial({ color: theme.accent });
     M.pieceMur = new MeshLambertMaterial({ color: s ? 0x8fa3d1 : 0x9aa8c8, transparent: true, opacity: s ? 0.06 : 0.1, side: DoubleSide, depthWrite: false });
     M.pieceTrait = new LineBasicMaterial({ color: s ? 0x6f86c0 : 0x7f8db0, transparent: true, opacity: 0.55 });
+    M.localMur = new MeshLambertMaterial({ color: s ? 0xb9c3d8 : 0xd5dae4, transparent: true, opacity: 0.55, depthWrite: false });
+    M.localPlafond = new MeshLambertMaterial({ color: s ? 0xb9c3d8 : 0xd5dae4, transparent: true, opacity: 0.16, depthWrite: false });
     M.gilet = new MeshLambertMaterial({ color: 0xff8a2a });
     M.pantalon = new MeshLambertMaterial({ color: 0x34405e });
     M.peau = new MeshLambertMaterial({ color: 0xe8c2a0 });
@@ -374,7 +377,20 @@ export function creerVue(conteneur, cb) {
     g.add(h);
     return g;
   }
-  const CONSTR = { evaps: construireEvap, echelles: construireEchelles, cloisons: construireCloison, obstacles: construireObstacle, portes: construirePorte, deflecteurs: construireDeflecteur, pieces: construirePiece, personnes: construirePersonne };
+  /* Local dans le bâtiment : quatre murs, plafond translucide, sol teinté selon la température */
+  function construireLocal(o) {
+    const g = new Group(), b = localGeo(o).box, L = b.x1 - b.x0, l = b.y1 - b.y0, H = b.z1, e = EP_LOCAL;
+    const sol = new Mesh(new BoxGeometry(L, l, 0.02), new MeshLambertMaterial({ color: couleurTemperature(o.T), transparent: true, opacity: 0.32, depthWrite: false }));
+    sol.position.set(o.x, o.y, 0.006); g.add(sol);
+    const mur = (sx, sy, x, y) => {
+      const m = boite(sx, sy, H, M.localMur, x, y, H / 2); m.userData.decor = true; g.add(m);
+      const ed = new LineSegments(new EdgesGeometry(m.geometry), M.trait); ed.position.copy(m.position); g.add(ed);
+    };
+    mur(L, e, o.x, b.y0 + e / 2); mur(L, e, o.x, b.y1 - e / 2); mur(e, l - 2 * e, b.x0 + e / 2, o.y); mur(e, l - 2 * e, b.x1 - e / 2, o.y);
+    if (o.plafond) { const p = boite(L, l, 0.04, M.localPlafond, o.x, o.y, H - 0.02); p.userData.decor = true; g.add(p); }
+    return g;
+  }
+  const CONSTR = { evaps: construireEvap, echelles: construireEchelles, cloisons: construireCloison, obstacles: construireObstacle, portes: construirePorte, deflecteurs: construireDeflecteur, pieces: construirePiece, personnes: construirePersonne, locaux: construireLocal };
 
   function construireObjet(liste, o) {
     if (objets[o.id]) vider(objets[o.id]);
@@ -420,11 +436,14 @@ export function creerVue(conteneur, cb) {
   function construireEtiquettes() {
     calque.innerHTML = ""; etiq = [];
     if (!projet) return;
+    const pr = projetVisible(projet), signe = T => (T > 0 ? "+" : "") + fr(T, 0) + " °C";
     const ajoute = (id, txt, pos, cls) => { const d = document.createElement("div"); d.className = "etq " + (cls || ""); d.textContent = txt; calque.appendChild(d); etiq.push({ id, d, pos: new Vector3(pos[0], pos[1], pos[2]) }); };
-    projet.evaps.forEach(e => { const z = evapGeo(e, projet.chambre).z; ajoute(e.id, e.nom, [e.x, e.y, z.zt + 0.25], "ev"); });
-    projet.echelles.forEach(e => { const g = echellesGeo(e); ajoute(e.id, e.nom + " · " + g.total + " éch.", [e.x, e.y, g.info.H + 0.25], "ec"); });
-    (projet.personnes || []).forEach(o => ajoute(o.id, o.nom + " · " + fr(o.taille, 2) + " m", [o.x, o.y, o.taille + 0.22], "pe"));
-    (projet.pieces || []).forEach(o => { ajoute(o.id, o.nom + " · " + (o.T > 0 ? "+" : "") + fr(o.T, 0) + " °C", [o.x, o.y, 0.15], "pc"); etiq[etiq.length - 1].piece = true; });
+    pr.evaps.forEach(e => { const z = evapGeo(e, pr.chambre).z; ajoute(e.id, e.nom, [e.x, e.y, z.zt + 0.25], "ev"); });
+    pr.echelles.forEach(e => { const g = echellesGeo(e); ajoute(e.id, e.nom + " · " + g.total + " éch.", [e.x, e.y, g.info.H + 0.25], "ec"); });
+    pr.personnes.forEach(o => ajoute(o.id, o.nom + " · " + fr(o.taille, 2) + " m", [o.x, o.y, o.taille + 0.22], "pe"));
+    pr.locaux.forEach(o => ajoute(o.id, o.nom + " · " + signe(o.T), [o.x, o.y, o.H + 0.3], "lc"));
+    if (pr.type === "batiment") pr.obstacles.forEach(o => ajoute(o.id, o.nom, [o.x, o.y, o.zb + o.h + 0.3], "ob"));
+    pr.pieces.forEach(o => { ajoute(o.id, o.nom + " · " + signe(o.T), [o.x, o.y, 0.15], "pc"); etiq[etiq.length - 1].piece = true; });
   }
   const pv = new Vector3();
   function majEtiquettes() {
@@ -546,7 +565,7 @@ export function creerVue(conteneur, cb) {
     cb.onPick && cb.onPick(null);
   });
   function objetProjet(id) {
-    for (const l of ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces", "personnes"]) { const o = (projet[l] || []).find(x => x.id === id); if (o) return o; }
+    for (const l of ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces", "personnes", "locaux"]) { const o = (projet[l] || []).find(x => x.id === id); if (o) return o; }
     return null;
   }
 
@@ -585,7 +604,7 @@ export function creerVue(conteneur, cb) {
   function pointVise(ev, libre) {
     viser(ev);
     if (!libre) {
-      if (!accroches) accroches = pointsAccroche(aff.pieces ? projet : Object.assign({}, projet, { pieces: [] }));
+      if (!accroches) { const v = projetVisible(projet); if (!aff.pieces) v.pieces = []; accroches = pointsAccroche(v); }
       const r = el.getBoundingClientRect(), w = r.width, h = r.height, mx = ev.clientX - r.left, my = ev.clientY - r.top;
       const rayon = ev.pointerType === "mouse" ? RAYON_ACCROCHE : RAYON_ACCROCHE * 1.8;
       let best = null, dmin = rayon;
@@ -654,7 +673,7 @@ export function creerVue(conteneur, cb) {
       projet = p;
       Object.values(objets).forEach(vider); objets = {};
       construireChambre();
-      ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces", "personnes"].forEach(l => (p[l] || []).forEach(o => construireObjet(l, o)));
+      (LISTES_PROJET[p.type] || LISTES_PROJET.chambre).forEach(l => (p[l] || []).forEach(o => construireObjet(l, o)));
       majPickables(); construireEtiquettes(); construireCotes(); majSelection(); colorerProduits();
       taille();
       if (premier || !garder) vue("iso", true);
