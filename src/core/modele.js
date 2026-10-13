@@ -20,17 +20,21 @@ export const TYPES = {
   deflecteurs: { seul: "Déflecteur d'angle", plusieurs: "Déflecteurs d'angle", prefixe: "Déflecteur " },
   pieces: { seul: "Pièce voisine", plusieurs: "Pièces voisines", prefixe: "Pièce " },
   personnes: { seul: "Personne", plusieurs: "Personnes", prefixe: "Personne " },
-  locaux: { seul: "Local", plusieurs: "Locaux", prefixe: "Local " }
+  locaux: { seul: "Local", plusieurs: "Locaux", prefixe: "Local " },
+  ctas: { seul: "CTA", plusieurs: "CTA", prefixe: "CTA " },
+  plenums: { seul: "Plénum", plusieurs: "Plénums", prefixe: "Plénum " },
+  gaines: { seul: "Gaine", plusieurs: "Gaines", prefixe: "Gaine " },
+  bouches: { seul: "Bouche", plusieurs: "Bouches et grilles", prefixe: "Bouche " }
 };
-export const LISTES = ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces", "personnes", "locaux"];
+export const LISTES = ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces", "personnes", "locaux", "ctas", "plenums", "gaines", "bouches"];
 /* Objets de décor : hors maillage, aperçu et analyse */
-export const DECOR = ["pieces", "personnes", "locaux"];
+export const DECOR = ["pieces", "personnes", "locaux", "ctas", "plenums", "gaines", "bouches"];
 /* Types de projet : chambre froide (flux d'air) ou bâtiment (implantation, sans calcul des flux).
    La « chambre » est l'enveloppe : la chambre froide, ou le hall principal du bâtiment. */
 export const TYPES_PROJET = { chambre: "Chambre froide", batiment: "Bâtiment" };
 export const LISTES_PROJET = {
   chambre: ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces", "personnes"],
-  batiment: ["locaux", "obstacles", "portes", "personnes"]
+  batiment: ["locaux", "ctas", "plenums", "gaines", "bouches", "obstacles", "portes", "personnes"]
 };
 
 export const MAILLES = {
@@ -43,7 +47,7 @@ export function chambreDefaut() {
   return { forme: "rect", longueur: 9, largeur: 6.5, H: 3.6, coin: "arriere-droit", coinLong: 3, coinLarg: 3, Ti: -25 };
 }
 export function reglagesDefaut() {
-  return { vmin: 0.15, vCourant: 0.5, zTravail: 1.8, tauxVise: 40, maille: "normal", recalage: true };
+  return { vmin: 0.15, vCourant: 0.5, zTravail: 1.8, tauxVise: 40, maille: "normal", recalage: true, vmaxGaine: 7, ratioGaine: 4 };
 }
 
 export function evapDefaut(ch) {
@@ -84,7 +88,14 @@ export function personneDefaut(ch) {
 export function localDefaut(ch) {
   return { x: 4, y: 3, L: 8, l: 6, H: 3, T: 20, plafond: true, forme: "rect", coin: "arriere-droit", coinLong: 3, coinLarg: 3 };
 }
-const DEFAUTS = { evaps: evapDefaut, echelles: echellesDefaut, cloisons: cloisonDefaut, obstacles: obstacleDefaut, portes: porteDefaut, deflecteurs: deflecteurDefaut, pieces: pieceDefaut, personnes: personneDefaut, locaux: localDefaut };
+/* Traitement d'air (bâtiment) : CTA posée au sol (z = bas), soufflage suivant dir */
+export function ctaDefaut() { return { x: 5, y: 5, z: 0, dir: 0, L: 4.5, l: 1.6, h: 1.8, q: 10000 }; }
+export function plenumDefaut() { return { x: 5, y: 5, z: 3, dir: 0, L: 1.5, l: 1, h: 0.8 }; }
+/* Bouche ou grille : au plafond (z = sous la bouche) ou murale (z = centre, face vers dir) ; w × h en m */
+export function boucheDefaut() { return { x: 5, y: 5, z: 3, dir: 0, type: "soufflage", pose: "plafond", w: 0.6, h: 0.6, q: 1000 }; }
+/* Gaine : points 3D ; section automatique depuis le débit (vitesse maxi des réglages) ou imposée (a × b mm ou Ø d mm) */
+export function gaineDefaut() { return { points: [[0, 0, 4], [6, 0, 4]], forme: "rect", q: 5000, auto: true, a: 500, b: 400, d: 500, hmax: null }; }
+const DEFAUTS = { evaps: evapDefaut, echelles: echellesDefaut, cloisons: cloisonDefaut, obstacles: obstacleDefaut, portes: porteDefaut, deflecteurs: deflecteurDefaut, pieces: pieceDefaut, personnes: personneDefaut, locaux: localDefaut, ctas: ctaDefaut, plenums: plenumDefaut, gaines: gaineDefaut, bouches: boucheDefaut };
 
 /* Projet d'exemple : chambre de stockage de glaces (nom de code uniquement) */
 export function projetExemple() {
@@ -92,7 +103,7 @@ export function projetExemple() {
   const p = {
     format: FORMAT, version: VERSION, type: "chambre", nom: "Projet Alpha", maj: Date.now(),
     chambre: ch, reglages: reglagesDefaut(),
-    evaps: [], echelles: [], cloisons: [], obstacles: [], portes: [], deflecteurs: [], pieces: [], personnes: [], locaux: [], cotes: []
+    evaps: [], echelles: [], cloisons: [], obstacles: [], portes: [], deflecteurs: [], pieces: [], personnes: [], locaux: [], ctas: [], plenums: [], gaines: [], bouches: [], cotes: []
   };
   ajouter(p, "evaps", { x: 4.5, y: 5.8, dir: 270, q: 9000, T: 8, dv: 0.45 });
   const a = ajouter(p, "echelles", { x: 4.2, y: 3.1, n: 7, rangees: 2 });
@@ -115,7 +126,7 @@ export function batimentExemple() {
   const p = {
     format: FORMAT, version: VERSION, type: "batiment", nom: "Projet Bêta", maj: Date.now(),
     chambre: chambreDefaut(), reglages: reglagesDefaut(),
-    evaps: [], echelles: [], cloisons: [], obstacles: [], portes: [], deflecteurs: [], pieces: [], personnes: [], locaux: [], cotes: []
+    evaps: [], echelles: [], cloisons: [], obstacles: [], portes: [], deflecteurs: [], pieces: [], personnes: [], locaux: [], ctas: [], plenums: [], gaines: [], bouches: [], cotes: []
   };
   ajouter(p, "locaux", { nom: "Atelier de production", x: 15, y: 18, L: 30, l: 20, H: 6, T: 12 });
   ajouter(p, "locaux", { nom: "Quai", x: 15, y: 4, L: 30, l: 8, H: 5, T: 5 });
@@ -129,6 +140,14 @@ export function batimentExemple() {
   ajouter(p, "portes", { nom: "Porte quai 2", x: 20, y: 0, w: 3, h: 4 });
   ajouter(p, "portes", { nom: "Porte atelier", x: 15, y: 8, w: 2.5, h: 3.5 });
   ajouter(p, "personnes", { x: 10, y: 11 });
+  // Traitement d'air de l'atelier : CTA dans le local technique, plénum, gaine galva puis gaine textile, reprise
+  ajouter(p, "ctas", { nom: "CTA atelier", x: 34, y: 24, z: 0, dir: 180, L: 5, l: 1.6, h: 1.8, q: 12000 });
+  ajouter(p, "plenums", { nom: "Plénum de soufflage", x: 28.5, y: 24, z: 4.4, L: 1.4, l: 1.2, h: 1 });
+  ajouter(p, "gaines", { nom: "Départ soufflage", points: [[31.5, 24, 0.9], [28.5, 24, 0.9], [28.5, 24, 4.4]], forme: "rect", q: 12000 });
+  ajouter(p, "gaines", { nom: "Gaine textile atelier", points: [[27.8, 24, 4.9], [2, 24, 4.9]], forme: "textile", q: 6000 });
+  ajouter(p, "gaines", { nom: "Gaine textile atelier 2", points: [[28.5, 23.4, 4.9], [28.5, 14, 4.9], [2, 14, 4.9]], forme: "textile", q: 6000 });
+  ajouter(p, "bouches", { nom: "Reprise atelier", x: 29.9, y: 18, z: 1.5, dir: 180, type: "reprise", pose: "murale", w: 1.2, h: 0.8, q: 10000 });
+  ajouter(p, "bouches", { nom: "Air neuf", x: 33, y: 28, z: 3, dir: 90, type: "airneuf", pose: "murale", w: 0.8, h: 0.6, q: 2000 });
   return p;
 }
 /* Bâtiment vide : un premier local de 20 × 15 × 6 m */
@@ -232,6 +251,22 @@ export function normaliserObjet(liste, o, ch) {
     // En L : le rectangle moins un coin, comme la chambre
     r.forme = r.forme === "L" ? "L" : "rect"; r.coin = COINS[r.coin] ? r.coin : "arriere-droit";
     r.coinLong = n(r.coinLong, 3, 0.1, Math.max(0.1, r.L - 0.3)); r.coinLarg = n(r.coinLarg, 3, 0.1, Math.max(0.1, r.l - 0.3));
+  } else if (liste === "ctas" || liste === "plenums") {
+    r.x = n(r.x, d.x); r.y = n(r.y, d.y); r.z = n(r.z, d.z, 0, 50); r.dir = angle(r.dir);
+    r.L = n(r.L, d.L, 0.2, 30); r.l = n(r.l, d.l, 0.2, 10); r.h = n(r.h, d.h, 0.2, 10);
+    if (liste === "ctas") r.q = n(r.q, d.q, 100, 500000);
+  } else if (liste === "bouches") {
+    r.x = n(r.x, d.x); r.y = n(r.y, d.y); r.z = n(r.z, d.z, 0, 50); r.dir = angle(r.dir);
+    r.type = ["soufflage", "reprise", "airneuf", "rejet"].indexOf(r.type) >= 0 ? r.type : "soufflage";
+    r.pose = r.pose === "murale" ? "murale" : "plafond";
+    r.w = n(r.w, d.w, 0.1, 5); r.h = n(r.h, d.h, 0.1, 5); r.q = n(r.q, d.q, 0, 200000);
+  } else if (liste === "gaines") {
+    const pts = (Array.isArray(r.points) ? r.points : []).filter(q => Array.isArray(q) && q.length === 3).map(q => q.map(v => Math.round(n(v, 0, -1000, 1000) * 1000) / 1000));
+    r.points = pts.length >= 2 ? pts : d.points;
+    r.forme = ["rect", "rond", "textile"].indexOf(r.forme) >= 0 ? r.forme : "rect";
+    r.q = n(r.q, d.q, 0, 500000); r.auto = r.auto !== false;
+    r.a = Math.round(n(r.a, d.a, 50, 5000)); r.b = Math.round(n(r.b, d.b, 50, 5000)); r.d = Math.round(n(r.d, d.d, 50, 3000));
+    r.hmax = nOuNull(r.hmax, 50, 5000);
   } else if (liste === "personnes") {
     r.x = n(r.x, d.x); r.y = n(r.y, d.y); r.dir = angle(r.dir); r.taille = n(r.taille, 1.75, 0.5, 2.3);
   }
@@ -263,6 +298,7 @@ export function normaliser(p) {
   const rg = out.reglages;
   rg.vmin = n(rg.vmin, 0.15, 0.02, 2); rg.vCourant = n(rg.vCourant, 0.5, 0.05, 5); rg.zTravail = n(rg.zTravail, 1.8, 0.2, 10);
   rg.tauxVise = n(rg.tauxVise, 40, 1, 500); rg.recalage = rg.recalage !== false;
+  rg.vmaxGaine = n(rg.vmaxGaine, 7, 1, 30); rg.ratioGaine = n(rg.ratioGaine, 4, 1, 15);
   if (!MAILLES[rg.maille]) rg.maille = "normal";
   for (const l of LISTES) out[l] = (Array.isArray(p[l]) ? p[l] : []).filter(o => o && typeof o === "object").map(o => normaliserObjet(l, o, ch));
   out.cotes = (Array.isArray(p.cotes) ? p.cotes : []).map(normaliserCote).filter(Boolean);

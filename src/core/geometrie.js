@@ -310,6 +310,7 @@ export function emprise(projet) {
   (projet.locaux || []).forEach(o => bx.push(localGeo(o).box));
   (projet.obstacles || []).forEach(o => bx.push(obstacleGeo(o).box));
   (projet.personnes || []).forEach(o => bx.push(personneGeo(o).box));
+  (projet.ctas || []).forEach(o => bx.push({ x0: o.x - Math.max(o.L, o.l) / 2, x1: o.x + Math.max(o.L, o.l) / 2, y0: o.y - Math.max(o.L, o.l) / 2, y1: o.y + Math.max(o.L, o.l) / 2, z1: o.z + o.h }));
   if (!bx.length) return { x0: 0, y0: 0, x1: 20, y1: 15, H: 4 };
   return bx.reduce((m, b) => ({ x0: Math.min(m.x0, b.x0), y0: Math.min(m.y0, b.y0), x1: Math.max(m.x1, b.x1), y1: Math.max(m.y1, b.y1), H: Math.max(m.H, b.z1) }), { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity, H: 0 });
 }

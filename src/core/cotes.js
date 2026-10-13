@@ -1,5 +1,6 @@
 /* Cotes (mesures de longueur point à point) : points d'accroche de la chambre et des objets, mesure.
    Module pur. Une cote est enregistrée dans le projet : { id, a: [x, y, z], b: [x, y, z] }. */
+import { ctaGeo, plenumGeo, boucheGeo } from "./composants.js";
 import { dims, polygone, pieceGeo, personneGeo, localPolygone, mursLocaux, porteSurMurs, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteCloison, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "./geometrie.js";
 
 /* Sommets d'une boîte alignée sur les axes */
@@ -51,6 +52,20 @@ export function pointsAccroche(projet) {
   projet.deflecteurs.forEach(o => sommetsBoite(deflecteurGeo(o, ch).box, o.nom, out));
   (projet.pieces || []).forEach(o => sommetsBoite(pieceGeo(o).box, o.nom, out));
   (projet.locaux || []).forEach(o => localPolygone(o).forEach(([x, y]) => { out.push({ p: [x, y, 0], nom: o.nom }); out.push({ p: [x, y, o.H], nom: o.nom }); }));
+  // Traitement d'air : piquages de CTA, centres des faces des plénums, bouches, points des gaines
+  (projet.ctas || []).forEach(o => {
+    const g = ctaGeo(o);
+    sommetsBoite(g.box, o.nom, out);
+    out.push({ p: g.soufflage.c.slice(), nom: o.nom + " · soufflage", ref: { id: o.id, quoi: "soufflage" } });
+    out.push({ p: g.reprise.c.slice(), nom: o.nom + " · reprise", ref: { id: o.id, quoi: "reprise" } });
+  });
+  (projet.plenums || []).forEach(o => {
+    const b = plenumGeo(o).box, cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2, cz = (b.z0 + b.z1) / 2;
+    sommetsBoite(b, o.nom, out);
+    [[b.x0, cy, cz], [b.x1, cy, cz], [cx, b.y0, cz], [cx, b.y1, cz], [cx, cy, b.z0], [cx, cy, b.z1]].forEach(p => out.push({ p, nom: o.nom + " · face" }));
+  });
+  (projet.bouches || []).forEach(o => out.push({ p: boucheGeo(o).c.slice(), nom: o.nom }));
+  (projet.gaines || []).forEach(o => o.points.forEach(p => out.push({ p: p.slice(), nom: o.nom })));
   (projet.personnes || []).forEach(o => { out.push({ p: [o.x, o.y, o.taille], nom: o.nom + " · haut de la tête" }); out.push({ p: [o.x, o.y, 0], nom: o.nom + " · pieds" }); });
   return out;
 }

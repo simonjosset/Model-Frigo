@@ -2,6 +2,7 @@
 import { CATALOGUE } from "../core/produits.js";
 import { dims, surface, volume, evapGeo, echellesGeo, cloisonGeo, porteCloison, MURS_PIECE, localSurface, polygone, COINS, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "../core/geometrie.js";
 import { MAILLES, TYPES_PROJET } from "../core/modele.js";
+import { ctaGeo, TYPES_BOUCHE, FORMES_GAINE, gaineMetres, texteSection } from "../core/composants.js";
 import { couleur } from "../core/champ.js";
 
 export function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
@@ -40,7 +41,7 @@ function actions(liste, o) {
   return '<div class="actions">' + (liste === "evaps" ? '<button type="button" class="b-ghost" data-act="masquer">' + (o.off ? "Réafficher" : "Simuler sans cet appareil") + "</button>" : "") +
     '<button type="button" class="b-ghost" data-act="dupliquer">Dupliquer</button><button type="button" class="b-ghost b-danger" data-act="supprimer">Supprimer</button></div>';
 }
-function info(lignes) { return '<div class="info">' + lignes.map(l => l ? (l.tot ? '<span class="tot">' + l[0] + '</span><b class="tot">' + l[1] + "</b>" : "<span>" + l[0] + "</span><b>" + l[1] + "</b>") : "").join("") + "</div>"; }
+export function info(lignes) { return '<div class="info">' + lignes.map(l => l ? (l.tot ? '<span class="tot">' + l[0] + '</span><b class="tot">' + l[1] + "</b>" : "<span>" + l[0] + "</span><b>" + l[1] + "</b>") : "").join("") + "</div>"; }
 
 /* ---------- Chambre ---------- */
 export function panneauChambre(p) {
@@ -239,6 +240,55 @@ function panneauLocal(p, o) {
   return h + actions("locaux", o);
 }
 
+/* ---------- Traitement d'air ---------- */
+function panneauCta(p, o) {
+  let h = titre(o, "Centrale de traitement d'air · " + fr(o.q, 0) + " m³/h");
+  h += '<div class="sec"><h4>CTA</h4><div class="grid">' + num(o, "q", "Débit de soufflage", "m³/h", { dec: 0 }) + "<div></div>" +
+    num(o, "L", "Longueur", "m") + num(o, "l", "Largeur", "m") + num(o, "h", "Hauteur", "m") + num(o, "z", "Posée à", "m du sol") +
+    num(o, "x", "Centre x", "m") + num(o, "y", "Centre y", "m") + dirs(o, "dir", "Sens du soufflage") + "</div>";
+  h += info(ctaGeo(o).sections.map(s => [s.nom, fr(s.t1 - s.t0, 2) + " m"]));
+  h += '<p class="hint">Caisson en sections, de la reprise (arrière) au soufflage (avant, flèche). Les piquages de soufflage et de reprise sont des points d\'accroche pour tracer les gaines : une gaine qui part du soufflage prend le débit de la CTA. R : quart de tour.</p></div>';
+  return h + actions("ctas", o);
+}
+function panneauPlenum(p, o) {
+  let h = titre(o, "Plénum · " + fr(o.L, 2) + " × " + fr(o.l, 2) + " × " + fr(o.h, 2) + " m");
+  h += '<div class="sec"><h4>Plénum</h4><div class="grid">' + num(o, "L", "Longueur", "m") + num(o, "l", "Largeur", "m") + num(o, "h", "Hauteur", "m") + num(o, "z", "Bas à", "m du sol") +
+    num(o, "x", "Centre x", "m") + num(o, "y", "Centre y", "m") + dirs(o, "dir", "Orientation") + "</div>";
+  h += '<p class="hint">Caisson de répartition en galva. Le centre de chaque face est un point d\'accroche pour y raccorder les gaines (gaines textiles notamment).</p></div>';
+  return h + actions("plenums", o);
+}
+function panneauBouche(p, o) {
+  let h = titre(o, (TYPES_BOUCHE[o.type] || TYPES_BOUCHE.soufflage).nom + " · " + fr(o.w, 2) + " × " + fr(o.h, 2) + " m");
+  h += '<div class="sec"><h4>Bouche ou grille</h4><div class="grid">' + sel(o, "type", "Type", Object.keys(TYPES_BOUCHE).map(t => [t, TYPES_BOUCHE[t].nom])) +
+    sel(o, "pose", "Pose", [["plafond", "Au plafond (vers le bas)"], ["murale", "Murale"]]) +
+    num(o, "w", "Largeur", "m") + num(o, "h", o.pose === "plafond" ? "Profondeur" : "Hauteur", "m") + num(o, "q", "Débit", "m³/h", { dec: 0 }) + num(o, "z", o.pose === "plafond" ? "Plafond à" : "Centre à", "m du sol") +
+    num(o, "x", "Centre x", "m") + num(o, "y", "Centre y", "m") + (o.pose === "murale" ? dirs(o, "dir", "Face vers") : "") + "</div>";
+  const A = o.w * o.h;
+  if (o.q > 0) h += info([["Vitesse frontale", fr(o.q / 3600 / A, 2) + " m/s"]]);
+  h += "</div>";
+  return h + actions("bouches", o);
+}
+function panneauGaine(p, o) {
+  const m = gaineMetres(o, p.reglages), s = m.section;
+  let h = titre(o, FORMES_GAINE[o.forme] + " · " + texteSection(s) + (s.erreur ? "" : " mm"));
+  h += '<div class="sec"><h4>Gaine</h4><div class="grid">' + sel(o, "forme", "Type de gaine", Object.keys(FORMES_GAINE).map(f => [f, FORMES_GAINE[f]]), { w2: true }) +
+    num(o, "q", "Débit d'air", "m³/h", { dec: 0 }) + "<div></div></div>";
+  h += '<label class="chk"><input type="checkbox" data-k="auto" data-type="chk"' + (o.auto ? " checked" : "") + "> Section calculée (vitesse maxi " + fr(p.reglages.vmaxGaine, 1) + " m/s, réglable dans Réglages)</label>";
+  if (o.auto) { if (o.forme === "rect") h += '<div class="grid">' + num(o, "hmax", "Hauteur maximale", "mm", { dec: 0, vide: "Libre" }) + "</div>"; }
+  else h += '<div class="grid">' + (o.forme === "rect" ? num(o, "a", "Largeur", "mm", { dec: 0 }) + num(o, "b", "Hauteur", "mm", { dec: 0 }) : num(o, "d", "Diamètre", "mm", { dec: 0 })) + "</div>";
+  if (s.erreur) h += '<p class="hint" style="color:var(--yellow)">' + esc(s.erreur) + "</p>";
+  else h += info([["Section", texteSection(s) + " mm"], ["Vitesse", fr(s.v, 2) + " m/s"], s.pam != null ? ["Perte de charge", fr(s.pam, 2) + " Pa/m"] : null,
+    ["Longueur", fr(m.L, 2) + " m"], ["Coudes", String(m.coudes)], [o.forme === "textile" ? "Surface de tissu" : "Surface de tôle", fr(m.surface, 1) + " m²"],
+    m.pdc != null ? ["Perte de charge du réseau droit", fr(m.pdc, 1) + " Pa"] : null]);
+  if (s.trop) h += '<p class="hint" style="color:var(--yellow)">Même le plus grand diamètre dépasse la vitesse maximale : prévoir plusieurs gaines.</p>';
+  if (o.forme === "textile") h += '<p class="hint">Gaine textile : diffusion et pression d\'entrée à définir avec le fabricant.</p>';
+  h += "</div>";
+  h += '<div class="sec"><h4>Tracé</h4><table class="tab-mini pts"><tr><th>Point</th><th class="n">x</th><th class="n">y</th><th class="n">z</th></tr>' +
+    o.points.map((q, i) => "<tr><td>" + (i + 1) + "</td>" + [0, 1, 2].map(j => '<td class="n"><input class="pt" data-k="points.' + i + "." + j + '" inputmode="decimal" value="' + aff(q[j], 2) + '"></td>').join("") + "</tr>").join("") + "</table>";
+  h += '<p class="hint">Pour retracer la gaine, supprimez-la puis tracez-en une nouvelle (bouton « Gaine » ou touche G). Les points de la gaine sont des accroches : une autre gaine peut y démarrer (piquage, té).</p></div>';
+  return h + actions("gaines", o);
+}
+
 /* Personne : repère d'échelle (hors calcul) */
 function panneauPersonne(p, o) {
   let h = titre(o, "Repère d'échelle · décor, hors calcul");
@@ -312,6 +362,10 @@ export function panneauObjet(p, liste, o, R, opts) {
   if (liste === "pieces") return panneauPiece(p, o);
   if (liste === "personnes") return panneauPersonne(p, o);
   if (liste === "locaux") return panneauLocal(p, o);
+  if (liste === "ctas") return panneauCta(p, o);
+  if (liste === "plenums") return panneauPlenum(p, o);
+  if (liste === "bouches") return panneauBouche(p, o);
+  if (liste === "gaines") return panneauGaine(p, o);
   if (liste === "obstacles") return panneauObstacle(p, o);
   return panneauPorte(p, o);
 }
@@ -319,6 +373,12 @@ export function panneauObjet(p, liste, o, R, opts) {
 /* ---------- Réglages ---------- */
 export function panneauReglages(p, a) {
   const r = p.reglages, c = x => ({ cle: "reglages." + x });
+  if (p.type === "batiment") {
+    let h = '<h2>Réglages</h2><p class="sous">Dimensionnement des gaines</p>';
+    h += '<div class="sec"><h4>Gaines</h4><div class="grid">' + num(r, "vmaxGaine", "Vitesse maximale", "m/s", { dec: 1, cle: "reglages.vmaxGaine" }) + num(r, "ratioGaine", "Rapport largeur / hauteur maxi", "", { dec: 1, cle: "reglages.ratioGaine" }) + "</div>";
+    h += '<p class="hint">Sections calculées comme dans l\'onglet Gaines de Frigobilan : la plus petite gaine sous la vitesse maximale ; en rectangulaire, pas de 50 mm et le moins de tôle ; en rond et textile, diamètres normalisés. Pertes de charge : Darcy-Weisbach, galva 0,15 mm, air à 20 °C.</p></div>';
+    return h;
+  }
   let h = '<h2>Réglages</h2><p class="sous">Seuils d\'analyse, finesse du calcul et animation</p>';
   h += '<div class="sec"><h4>Analyse</h4><div class="grid">' + num(r, "vmin", "Air considéré brassé dès", "m/s", c("vmin")) +
     num(r, "tauxVise", "Taux de brassage visé", "vol/h", { dec: 0, cle: "reglages.tauxVise" }) +
@@ -333,12 +393,16 @@ export function panneauReglages(p, a) {
   return h;
 }
 
-export function resumeObjet(liste, o) {
+export function resumeObjet(liste, o, p) {
   if (liste === "evaps") return fr(o.q, 0) + " m³/h · " + fr(o.T, 0) + " m" + (o.type === "double" ? " · double flux" : "") + (o.coude ? " · coudes ↓" : "") + (o.retombee ? " · retombée" : "");
   if (liste === "echelles") { const g = echellesGeo(o); return g.total + " éch. · " + fr(g.total * g.info.nb, 0) + " produits"; }
   if (liste === "cloisons") { return "L " + fr(Math.hypot(o.x1 - o.x0, o.y1 - o.y0), 2) + " m" + (o.zh != null || o.zb > 0 ? " · partielle" : "") + (o.porte ? " · porte" + (o.porteOuverte ? " ouverte" : " fermée") : ""); }
   if (liste === "obstacles") return fr(o.L, 2) + " × " + fr(o.l, 2) + " × " + fr(o.h, 2) + " m" + (o.poreux > 0.01 ? " · ajouré" : "");
   if (liste === "personnes") return fr(o.taille, 2) + " m";
+  if (liste === "ctas") return fr(o.q, 0) + " m³/h · " + fr(o.L, 1) + " × " + fr(o.l, 1) + " × " + fr(o.h, 1) + " m";
+  if (liste === "plenums") return fr(o.L, 2) + " × " + fr(o.l, 2) + " × " + fr(o.h, 2) + " m";
+  if (liste === "bouches") return (TYPES_BOUCHE[o.type] || TYPES_BOUCHE.soufflage).nom + " · " + fr(o.w, 2) + " × " + fr(o.h, 2) + " m";
+  if (liste === "gaines") { const m = gaineMetres(o, p ? p.reglages : {}); return FORMES_GAINE[o.forme].replace(" galva", "") + " " + texteSection(m.section) + " · " + fr(m.L, 1) + " m"; }
   if (liste === "locaux") return (o.forme === "L" ? "En L · " : "") + fr(localSurface(o), 0) + " m² · h " + fr(o.H, 1) + " m · " + (o.T > 0 ? "+" : "") + fr(o.T, 0) + " °C";
   if (liste === "pieces") return fr(o.L, 2) + " × " + fr(o.l, 2) + " m · " + (o.T > 0 ? "+" : "") + fr(o.T, 0) + " °C";
   if (liste === "deflecteurs") return "R " + fr(o.rayon, 2) + " m · L " + fr(o.longueur, 2) + " m · " + (o.angle === "sol" ? "sol" : "plafond");

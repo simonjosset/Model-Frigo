@@ -275,6 +275,29 @@ check("bâtiment : saisie de la position d'un local", await page.evaluate(id => 
 await page.click('[data-tab="res"]');
 check("bâtiment : récapitulatif des locaux avec total", /Récapitulatif/.test(await page.textContent("#pane-res")) && /Total/.test(await page.textContent("#pane-res")) && (await page.textContent('[data-tab="res"]')) === "Récapitulatif");
 check("bâtiment : pas de calcul des flux lancé", await page.evaluate(() => !MF.calculs.enCours()));
+// Traitement d'air : composants de l'exemple, tracé d'une gaine depuis le soufflage de la CTA
+check("traitement d'air : CTA, plénum, gaines et bouches de l'exemple", await page.evaluate(() => { const p = MF.projet(); return p.ctas.length === 1 && p.plenums.length === 1 && p.gaines.length === 3 && p.bouches.length === 2; }) && /CTA atelier · 12 000 m³\/h/.test((await page.textContent(".vue3d-etiquettes")).replace(/\s/g, " ")));
+await page.click("#bGaine");
+check("gaine : mode tracé", await page.evaluate(() => MF.vue.trace()) && /Tracé de gaine/.test(await page.textContent("#sonde")));
+const souf = await page.evaluate(() => { const c = MF.projet().ctas[0]; return MF.vue.ecran([c.x - c.L / 2, c.y, c.z + c.h / 2]); });
+await page.mouse.move(souf.x + 4, souf.y - 3);
+check("gaine : accroche au soufflage de la CTA", /CTA atelier · soufflage/.test(await page.textContent("#sonde")));
+await page.mouse.click(souf.x + 4, souf.y - 3);
+const p2 = await page.evaluate(() => MF.vue.ecran([31.5, 18.03, 0.9]));
+await page.mouse.click(p2.x, p2.y);
+await page.keyboard.press("Enter");
+const ga = await page.evaluate(() => { const p = MF.projet(); return p.gaines[p.gaines.length - 1]; });
+check("gaine tracée : départ au soufflage, tracé à angle droit, débit de la CTA", ga && ga.points.length === 2 && ga.points[0].join() === "31.5,24,0.9" && ga.points[1][0] === 31.5 && Math.abs(ga.points[1][1] - 18) <= 0.051 && ga.q === 12000, JSON.stringify(ga && ga.points));
+await page.selectOption("#f_forme", "rect");
+check("gaine : section calculée (rectangulaire, 7 m/s)", /Section/.test(await page.textContent("#pane-prop")) && await page.evaluate(() => { const p = MF.projet(); return p.gaines[p.gaines.length - 1].forme === "rect"; }));
+const sec7 = await page.textContent("#pane-prop h2 + .sous");
+await page.click('[data-tab="regl"]');
+await page.fill("#f_reglages\\.vmaxGaine", "5"); await page.press("#f_reglages\\.vmaxGaine", "Enter");
+await page.click('[data-tab="prop"]');
+const sec5 = await page.textContent("#pane-prop h2 + .sous");
+check("gaine : vitesse maxi des réglages prise en compte", sec7 !== sec5, sec7 + " → " + sec5);
+await page.click('[data-tab="res"]');
+check("récapitulatif : métrés des gaines par type", /Gaines/.test(await page.textContent("#pane-res")) && /Total par type/.test(await page.textContent("#pane-res")) && /Centrales de traitement/.test(await page.textContent("#pane-res")));
 await page.click('[data-vue="iso"]'); await page.waitForTimeout(600);
 await page.screenshot({ path: path.join(SHOTS, "4c-batiment-locaux.png") });
 // Changement de type depuis le panneau du projet, puis annulation
