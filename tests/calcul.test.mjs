@@ -98,3 +98,16 @@ test("coudes vers le bas : l'air sort sous chaque coude, débit conservé, jet d
   assert.ok(R.evaps[0].cotes[0].coude && R.evaps[0].cotes[0].vArrivee > 0);
   assert.ok(R.alertes.some(a => /soufflage vers le bas/.test(a.titre)));
 });
+
+test("coude avec avancée horizontale : sortie déportée vers l'avant, encombrement allongé", () => {
+  const p = salle(); p.evaps[0].coude = true; p.evaps[0].coudeAvance = 1.2;
+  const g = evapGeo(p.evaps[0], p.chambre), f = g.cotes[0].fans[0], g0 = evapGeo(Object.assign({}, p.evaps[0], { coudeAvance: 0 }), p.chambre).cotes[0].fans[0];
+  assert.ok(Math.abs(f.coude.sortie[0] - g0.coude.sortie[0] - 1.2) < 1e-9, "sortie avancée de 1,2 m suivant le soufflage (+x)");
+  assert.ok(Math.abs((f.coude.box.x1 - f.coude.box.x0) - (1.2 + g.dv)) < 1e-9);
+  const G = construireGrille(p, { h: 0.2 }), S = preparer(G);
+  let bas = 0; for (let k = 0; k < S.NW; k++) if (S.fw[k] && S.bw[k] < 0) bas -= S.bw[k] * G.dx * G.dy;
+  assert.ok(Math.abs(bas - 6000 / 3600) < 1e-3);
+  p.evaps[0].coudeAvance = 20;
+  const R = analyser(p, calculerApercu(p));
+  assert.ok(R.alertes.some(a => /coude trop long/.test(a.titre)));
+});

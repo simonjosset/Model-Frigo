@@ -109,8 +109,11 @@ function panneauEvap(p, e, R) {
   h += '<div class="sec"><h4>Coudes de soufflage</h4><label class="chk"><input type="checkbox" data-k="coude" data-type="chk"' + (e.coude ? " checked" : "") + '> Coude vers le bas en sortie de chaque ventilateur</label>';
   if (e.coude) {
     const so = g.cotes[0].fans[0].coude;
-    h += '<div class="grid" style="margin-top:8px">' + num(e, "coudeDescente", "Descente sous l'hélice", "m") + '<div><label>Sortie à</label><div class="f"><input readonly value="' + aff(so.zOut, 2) + '"><span class="u">m du sol</span></div></div></div>';
-    h += '<p class="hint">Coude à 90° du diamètre de l\'hélice : l\'air ressort vers le bas, à la verticale juste devant chaque ventilateur. La portée constructeur sert à régler la force du jet ; la portée horizontale n\'est plus contrôlée.</p>';
+    h += '<div class="grid" style="margin-top:8px">' + num(e, "coudeAvance", "Avancée horizontale", "m") + num(e, "coudeDescente", "Descente sous l'hélice", "m") +
+      '<div><label>Sortie à</label><div class="f"><input readonly value="' + aff(so.zOut, 2) + '"><span class="u">m du sol</span></div></div>' +
+      '<div><label>Devant l\'appareil à</label><div class="f"><input readonly value="' + aff(so.avance + g.dv / 2, 2) + '"><span class="u">m</span></div></div></div>';
+    h += '<p class="hint">Avancée horizontale : longueur de gaine droite entre l\'hélice et le coude (0 = coude directement sur l\'hélice). Elle déporte la sortie vers l\'avant, par exemple pour souffler au-dessus d\'une allée ou d\'une rangée d\'échelles.</p>';
+    h += '<p class="hint">Coude à 90° du diamètre de l\'hélice : l\'air ressort vers le bas, à la verticale de la sortie. La portée constructeur sert à régler la force du jet ; la portée horizontale n\'est plus contrôlée.</p>';
   }
   const ev = R && R.evaps.find(x => x.id === e.id);
   const lignes = [["Débit par ventilateur", fr(e.q / g.cotes.length / nf, 0) + " m³/h"], ["Vitesse dans l'hélice (approx.)", fr(vS, 1) + " m/s"], ["Distance au plafond", fr(g.z.drop, 2) + " m"]];

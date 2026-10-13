@@ -186,8 +186,15 @@ export function creerVue(conteneur, cb) {
     // Coudes vers le bas en sortie d'hélice
     geo.cotes.forEach(c => c.fans.forEach(f => {
       if (!f.coude) return;
-      const so = f.coude.sortie, depart = new Vector3(f.c[0] - c.u[0] * 0.02, f.c[1] - c.u[1] * 0.02, f.c[2]);
-      const courbe = new QuadraticBezierCurve3(depart, new Vector3(so[0], so[1], f.c[2]), new Vector3(so[0], so[1], so[2]));
+      const so = f.coude.sortie, av = f.coude.avance, depart = new Vector3(f.c[0] - c.u[0] * 0.02, f.c[1] - c.u[1] * 0.02, f.c[2]);
+      // Gaine droite (si avancée), puis coude jusqu'à la sortie
+      const debutCoude = new Vector3(f.c[0] + c.u[0] * av, f.c[1] + c.u[1] * av, f.c[2]);
+      if (av > 0.01) {
+        const lg = av + 0.02, gaine = new Mesh(new CylinderGeometry(f.coude.r * 0.98, f.coude.r * 0.98, lg, 20, 1, true), M.coude);
+        gaine.position.copy(depart).lerp(debutCoude, 0.5);
+        gaine.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), new Vector3(c.u[0], c.u[1], 0)); g.add(gaine);
+      }
+      const courbe = new QuadraticBezierCurve3(av > 0.01 ? debutCoude : depart, new Vector3(so[0], so[1], f.c[2]), new Vector3(so[0], so[1], so[2]));
       g.add(new Mesh(new TubeGeometry(courbe, 24, f.coude.r * 0.98, 20, false), M.coude));
       const bord = new Mesh(new RingGeometry(f.coude.r * 0.82, f.coude.r * 1.02, 24), M.anneau);
       bord.position.set(so[0], so[1], so[2] - 0.004); bord.rotation.x = Math.PI; g.add(bord);

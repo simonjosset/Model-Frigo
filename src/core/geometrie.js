@@ -77,7 +77,7 @@ export function evapGeo(e, ch) {
     for (let f = 0; f < nf; f++) {
       const o = ((f + 0.5) / nf - 0.5) * len;
       const fan = { o, c: [O[0] + pv[0] * o, O[1] + pv[1] * o, z.zc], q: qs / nf };
-      if (e.coude) fan.coude = coudeGeo(fan.c, v, pv, dv, e.coudeDescente);
+      if (e.coude) fan.coude = coudeGeo(fan.c, v, pv, dv, e.coudeDescente, e.coudeAvance);
       fans.push(fan);
     }
     return { s, u: v, p: pv, O, fans, q: qs };
@@ -90,15 +90,16 @@ export function evapGeo(e, ch) {
 }
 
 /* Coude à 90° en sortie d'hélice : l'air ressort vers le bas.
-   Encombrement : une hélice de large et de profondeur devant le ventilateur, du haut de l'hélice
-   jusqu'à la sortie, `descente` sous le bas de l'hélice. */
-export function coudeGeo(c, u, p, dv, descente) {
-  const r = dv / 2, zOut = Math.max(0.2, c[2] - r - Math.max(0, descente || 0));
-  const ax = [c[0] + u[0] * dv / 2, c[1] + u[1] * dv / 2];
-  const ex = Math.abs(u[0]) * dv / 2 + Math.abs(p[0]) * r, ey = Math.abs(u[1]) * dv / 2 + Math.abs(p[1]) * r;
+   Une gaine droite de longueur `avance` peut prolonger l'hélice avant le coude.
+   Encombrement : une hélice de large, de l'hélice jusqu'au bout du coude (avance + diamètre),
+   du haut de l'hélice jusqu'à la sortie, `descente` sous le bas de l'hélice. */
+export function coudeGeo(c, u, p, dv, descente, avance) {
+  const r = dv / 2, av = Math.max(0, avance || 0), zOut = Math.max(0.2, c[2] - r - Math.max(0, descente || 0));
+  const L = av + dv, mi = [c[0] + u[0] * L / 2, c[1] + u[1] * L / 2], ax = [c[0] + u[0] * (av + r), c[1] + u[1] * (av + r)];
+  const ex = Math.abs(u[0]) * L / 2 + Math.abs(p[0]) * r, ey = Math.abs(u[1]) * L / 2 + Math.abs(p[1]) * r;
   return {
-    box: { x0: ax[0] - ex, x1: ax[0] + ex, y0: ax[1] - ey, y1: ax[1] + ey, z0: zOut, z1: c[2] + r },
-    sortie: [ax[0], ax[1], zOut], zOut, r
+    box: { x0: mi[0] - ex, x1: mi[0] + ex, y0: mi[1] - ey, y1: mi[1] + ey, z0: zOut, z1: c[2] + r },
+    sortie: [ax[0], ax[1], zOut], zOut, r, avance: av
   };
 }
 

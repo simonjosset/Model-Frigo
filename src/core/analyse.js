@@ -2,7 +2,7 @@
    échelles, alertes. Fonctionne sur l'aperçu comme sur le calcul fin. */
 import { vitesse } from "./champ.js";
 import { distanceLibre, plage, SOLIDE } from "./grille.js";
-import { dims, volume, porteSnap, obstacleGeo } from "./geometrie.js";
+import { dims, volume, porteSnap, obstacleGeo, dansEncoche } from "./geometrie.js";
 
 function fr(x, d) { return (+x).toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d }); }
 
@@ -156,6 +156,8 @@ function analyseCoudes(F, G, e, cote, geo, A) {
     }
     return { zOut: so[2], chute: so[2] - zArr, quoi, v };
   });
+  const dehors = cote.fans.filter(f => { const so = f.coude.sortie; return so[0] < 0 || so[1] < 0 || so[0] > G.W || so[1] > G.B || dansEncoche(G.k, so[0], so[1]); }).length;
+  if (dehors) A("bad", nom + " : coude trop long", dehors + " sortie" + (dehors > 1 ? "s" : "") + " de coude hors de la chambre : réduisez l'avancée horizontale.", e.id);
   const vMoy = sorties.reduce((a, x) => a + x.v, 0) / sorties.length, chute = Math.min.apply(null, sorties.map(x => x.chute));
   const surProduits = sorties.filter(x => x.quoi === "produits").length;
   A("ok", nom + " : soufflage vers le bas", "Coudes en sortie des " + sorties.length + " hélices, sortie à " + fr(sorties[0].zOut, 2) + " m du sol ; l'air arrive à environ " + fr(vMoy, 2) + " m/s, 30 cm avant " + (surProduits ? "les produits (" + surProduits + " sortie" + (surProduits > 1 ? "s" : "") + " au-dessus des échelles)" : sorties[0].quoi === "sol" ? "le sol" : "l'obstacle situé dessous") + ".", e.id);

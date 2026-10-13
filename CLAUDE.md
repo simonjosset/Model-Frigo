@@ -8,7 +8,7 @@ Outil web de modélisation 3D d'une chambre froide et des flux d'air de ses éva
 - `src/core/` : modules ES purs (sans DOM), testés avec `node --test` :
   - `modele.js` : format du projet, valeurs par défaut, `normaliser` (migration de tout fichier, à garder compatible), ajout / duplication d'objets ;
   - `produits.js` : catalogue de produits, calcul d'une échelle (glissières, étages chargés, rangement, masse), résistance à l'air ;
-  - `geometrie.js` : chambre rectangle ou en L (rectangle `longueur` × `largeur` moins un coin `coin` de `coinLong` × `coinLarg`), évaporateurs (côtés de soufflage, hélices, coudes vers le bas `coude` / `coudeDescente` : caisson plein + sortie imposée sous le coude), groupes d'échelles, cloisons, obstacles, portes ;
+  - `geometrie.js` : chambre rectangle ou en L (rectangle `longueur` × `largeur` moins un coin `coin` de `coinLong` × `coinLarg`), évaporateurs (côtés de soufflage, hélices, coudes vers le bas `coude` / `coudeAvance` / `coudeDescente` : caisson plein + sortie imposée sous le coude), groupes d'échelles, cloisons, obstacles, portes ;
   - `grille.js` : maillage en cellules (pleines, poreuses, produits) commun à l'aperçu et au calcul fin ;
   - `apercu.js` : modèle de jets empirique en 3D (fonction de courant à débit constant + vitesse de jet suivant la loi de portée) ;
   - `cfd.js` : Navier-Stokes incompressible isotherme sur grille décalée (semi-lagrangien, diffusion implicite, Forchheimer, projection par gradient conjugué) ; ventilateurs et aspirations en débits imposés sur les faces des caissons ; viscosité de jet réglée sur la portée (`REGLAGE.kPortee`) ;
