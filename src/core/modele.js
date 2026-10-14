@@ -14,6 +14,7 @@ export function uid(prefix) {
 export const TYPES = {
   evaps: { seul: "Évaporateur", plusieurs: "Évaporateurs", prefixe: "Évap " },
   echelles: { seul: "Groupe d'échelles", plusieurs: "Échelles", prefixe: "Échelles " },
+  cellules: { seul: "Cellule", plusieurs: "Cellules", prefixe: "Cellule " },
   cloisons: { seul: "Cloison", plusieurs: "Cloisons", prefixe: "Cloison " },
   obstacles: { seul: "Obstacle", plusieurs: "Obstacles", prefixe: "Obstacle " },
   portes: { seul: "Porte", plusieurs: "Portes", prefixe: "Porte " },
@@ -26,14 +27,14 @@ export const TYPES = {
   gaines: { seul: "Gaine", plusieurs: "Gaines", prefixe: "Gaine " },
   bouches: { seul: "Bouche", plusieurs: "Bouches et grilles", prefixe: "Bouche " }
 };
-export const LISTES = ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces", "personnes", "locaux", "ctas", "plenums", "gaines", "bouches"];
+export const LISTES = ["evaps", "echelles", "cellules", "cloisons", "obstacles", "portes", "deflecteurs", "pieces", "personnes", "locaux", "ctas", "plenums", "gaines", "bouches"];
 /* Objets de décor : hors maillage, aperçu et analyse */
 export const DECOR = ["pieces", "personnes", "locaux", "ctas", "plenums", "gaines", "bouches"];
 /* Types de projet : chambre froide (flux d'air) ou bâtiment (implantation, sans calcul des flux).
    La « chambre » est l'enveloppe : la chambre froide, ou le hall principal du bâtiment. */
 export const TYPES_PROJET = { chambre: "Chambre froide", batiment: "Bâtiment" };
 export const LISTES_PROJET = {
-  chambre: ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces", "personnes"],
+  chambre: ["evaps", "echelles", "cellules", "cloisons", "obstacles", "portes", "deflecteurs", "pieces", "personnes"],
   batiment: ["locaux", "ctas", "plenums", "gaines", "bouches", "obstacles", "portes", "personnes"]
 };
 
@@ -59,6 +60,16 @@ export function echellesDefaut(ch) {
     x: ch.longueur / 2, y: ch.largeur / 2, dir: 0, n: 6, rangees: 2, ecart: 0.05, allee: 0.8,
     H: 1.875, W: 0.626, D: 0.507, etages: 23, etagesCharges: null, parEtage: null,
     produit: produitDuCatalogue("glace33")
+  };
+}
+/* Cellule de refroidissement (type BP) : une place par échelle, côte à côte, chacune avec son ventilateur
+   à l'arrière qui aspire l'air de la chambre à travers les produits. dir : sens de passage de l'air, de la façade
+   (entrée des échelles) vers les ventilateurs. Échelles et produits : mêmes champs qu'un groupe d'échelles. */
+export function celluleDefaut(ch) {
+  return {
+    x: ch.longueur / 2, y: ch.largeur / 2, dir: 90, places: 2, profondeur: 1, jeu: 0.05, hauteur: null, etanche: false,
+    q: 4000, dv: 0.63, caisson: 0.6, sortie: "arriere", T: 6,
+    H: 1.875, W: 0.626, D: 0.507, etages: 23, etagesCharges: null, parEtage: null, produit: produitDuCatalogue("glace33")
   };
 }
 export function cloisonDefaut(ch) {
@@ -95,7 +106,7 @@ export function plenumDefaut() { return { x: 5, y: 5, z: 3, dir: 0, L: 1.5, l: 1
 export function boucheDefaut() { return { x: 5, y: 5, z: 3, dir: 0, type: "soufflage", pose: "plafond", w: 0.6, h: 0.6, q: 1000 }; }
 /* Gaine : points 3D ; section automatique depuis le débit (vitesse maxi des réglages) ou imposée (a × b mm ou Ø d mm) */
 export function gaineDefaut() { return { points: [[0, 0, 4], [6, 0, 4]], forme: "rect", q: 5000, auto: true, a: 500, b: 400, d: 500, hmax: null }; }
-const DEFAUTS = { evaps: evapDefaut, echelles: echellesDefaut, cloisons: cloisonDefaut, obstacles: obstacleDefaut, portes: porteDefaut, deflecteurs: deflecteurDefaut, pieces: pieceDefaut, personnes: personneDefaut, locaux: localDefaut, ctas: ctaDefaut, plenums: plenumDefaut, gaines: gaineDefaut, bouches: boucheDefaut };
+const DEFAUTS = { evaps: evapDefaut, echelles: echellesDefaut, cellules: celluleDefaut, cloisons: cloisonDefaut, obstacles: obstacleDefaut, portes: porteDefaut, deflecteurs: deflecteurDefaut, pieces: pieceDefaut, personnes: personneDefaut, locaux: localDefaut, ctas: ctaDefaut, plenums: plenumDefaut, gaines: gaineDefaut, bouches: boucheDefaut };
 
 /* Projet d'exemple : chambre de stockage de glaces (nom de code uniquement) */
 export function projetExemple() {
@@ -103,7 +114,7 @@ export function projetExemple() {
   const p = {
     format: FORMAT, version: VERSION, type: "chambre", nom: "Projet Alpha", maj: Date.now(),
     chambre: ch, reglages: reglagesDefaut(),
-    evaps: [], echelles: [], cloisons: [], obstacles: [], portes: [], deflecteurs: [], pieces: [], personnes: [], locaux: [], ctas: [], plenums: [], gaines: [], bouches: [], cotes: []
+    evaps: [], echelles: [], cellules: [], cloisons: [], obstacles: [], portes: [], deflecteurs: [], pieces: [], personnes: [], locaux: [], ctas: [], plenums: [], gaines: [], bouches: [], cotes: []
   };
   ajouter(p, "evaps", { x: 4.5, y: 5.8, dir: 270, q: 9000, T: 8, dv: 0.45 });
   const a = ajouter(p, "echelles", { x: 4.2, y: 3.1, n: 7, rangees: 2 });
@@ -126,7 +137,7 @@ export function batimentExemple() {
   const p = {
     format: FORMAT, version: VERSION, type: "batiment", nom: "Projet Bêta", maj: Date.now(),
     chambre: chambreDefaut(), reglages: reglagesDefaut(),
-    evaps: [], echelles: [], cloisons: [], obstacles: [], portes: [], deflecteurs: [], pieces: [], personnes: [], locaux: [], ctas: [], plenums: [], gaines: [], bouches: [], cotes: []
+    evaps: [], echelles: [], cellules: [], cloisons: [], obstacles: [], portes: [], deflecteurs: [], pieces: [], personnes: [], locaux: [], ctas: [], plenums: [], gaines: [], bouches: [], cotes: []
   };
   ajouter(p, "locaux", { nom: "Atelier de production", x: 15, y: 18, L: 30, l: 20, H: 6, T: 12 });
   ajouter(p, "locaux", { nom: "Quai", x: 15, y: 4, L: 30, l: 8, H: 5, T: 5 });
@@ -217,10 +228,17 @@ export function normaliserObjet(liste, o, ch) {
     r.retombee = !!r.retombee; r.retombeeHaut = ["auto", "plafond", "appareil"].indexOf(r.retombeeHaut) >= 0 ? r.retombeeHaut : "auto";
     r.retombeeBas = nOuNull(r.retombeeBas, 0, 30); r.retombeeDist = n(r.retombeeDist, 0, -20, 20);
     r.retombeeLargeur = nOuNull(r.retombeeLargeur, 0.2, 200); r.retombeeMurs = !!r.retombeeMurs; r.retombeeDecal = n(r.retombeeDecal, 0, -100, 100);
-  } else if (liste === "echelles") {
+  } else if (liste === "echelles" || liste === "cellules") {
     r.x = n(r.x, d.x); r.y = n(r.y, d.y); r.dir = angle(r.dir);
-    r.n = Math.round(n(r.n, d.n, 1, 60)); r.rangees = Math.round(n(r.rangees, d.rangees, 1, 20));
-    r.ecart = n(r.ecart, d.ecart, 0, 3); r.allee = n(r.allee, d.allee, 0, 6);
+    if (liste === "echelles") {
+      r.n = Math.round(n(r.n, d.n, 1, 60)); r.rangees = Math.round(n(r.rangees, d.rangees, 1, 20));
+      r.ecart = n(r.ecart, d.ecart, 0, 3); r.allee = n(r.allee, d.allee, 0, 6);
+    } else {
+      r.places = Math.round(n(r.places, d.places, 1, 20)); r.profondeur = Math.round(n(r.profondeur, d.profondeur, 1, 4));
+      r.jeu = n(r.jeu, d.jeu, 0, 0.5); r.hauteur = nOuNull(r.hauteur, 0.5, 6); r.etanche = !!r.etanche;
+      r.q = n(r.q, d.q, 100, 100000); r.dv = n(r.dv, d.dv, 0.2, 1.5); r.caisson = n(r.caisson, d.caisson, 0.2, 2);
+      r.sortie = r.sortie === "haut" ? "haut" : "arriere"; r.T = n(r.T, d.T, 0.5, 60);
+    }
     r.H = n(r.H, d.H, 0.4, 3); r.W = n(r.W, d.W, 0.2, 2); r.D = n(r.D, d.D, 0.2, 2);
     r.etages = Math.round(n(r.etages, d.etages, 1, 80));
     r.etagesCharges = nOuNull(r.etagesCharges, 0, 80); if (r.etagesCharges != null) r.etagesCharges = Math.round(r.etagesCharges);

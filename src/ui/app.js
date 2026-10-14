@@ -1,6 +1,6 @@
 /* Modèle Frigo : contrôleur de l'interface (sélection, édition, annulation, calculs, résultats, projets). */
 import { normaliser, normaliserObjet, normaliserCote, ajouter, dupliquer, trouver, projetExemple, batimentExemple, batimentVide, TYPES, LISTES, LISTES_PROJET, DECOR } from "../core/modele.js";
-import { dims, volume, surface, evapGeo, echellesGeo, garderDedans as garderDedansChambre, collerPiece, murLibre, localSurface, mursLocaux, porteSurMurs, pivoterLocal, aimanterLocal, emprise, localGeo } from "../core/geometrie.js";
+import { dims, volume, surface, evapGeo, echellesGeo, celluleGeo, garderDedans as garderDedansChambre, collerPiece, murLibre, localSurface, mursLocaux, porteSurMurs, pivoterLocal, aimanterLocal, emprise, localGeo } from "../core/geometrie.js";
 import { produitDuCatalogue } from "../core/produits.js";
 import { creerStore } from "./store.js";
 import { creerCalculs } from "./calculs.js";
@@ -11,8 +11,8 @@ import { gaineMetres, metresGaines, texteSection, TYPES_BOUCHE } from "../core/c
 import { PALIERS, GRADUATIONS, VMAX_ECHELLE, positionEchelle } from "../core/champ.js";
 
 const $ = id => document.getElementById(id);
-const COULEURS = { evaps: "#3D7BFF", echelles: "#14CA74", cloisons: "#8F9BB6", obstacles: "#B07D45", portes: "#E07B39", deflecteurs: "#C9A23F", pieces: "#5B6B8C", personnes: "#FF8A2A", locaux: "#7C8DB5", ctas: "#5C8DD6", plenums: "#9AA7BD", gaines: "#B8C2CC", bouches: "#3D7BFF" };
-const ICONES = { evaps: "❄", echelles: "▤", cloisons: "▮", obstacles: "■", portes: "⌂", deflecteurs: "◜", pieces: "⬚", personnes: "☺", locaux: "▣", ctas: "⊞", plenums: "▭", gaines: "═", bouches: "▦" };
+const COULEURS = { evaps: "#3D7BFF", echelles: "#14CA74", cellules: "#2FBFD6", cloisons: "#8F9BB6", obstacles: "#B07D45", portes: "#E07B39", deflecteurs: "#C9A23F", pieces: "#5B6B8C", personnes: "#FF8A2A", locaux: "#7C8DB5", ctas: "#5C8DD6", plenums: "#9AA7BD", gaines: "#B8C2CC", bouches: "#3D7BFF" };
+const ICONES = { evaps: "❄", echelles: "▤", cellules: "▥", cloisons: "▮", obstacles: "■", portes: "⌂", deflecteurs: "◜", pieces: "⬚", personnes: "☺", locaux: "▣", ctas: "⊞", plenums: "▭", gaines: "═", bouches: "▦" };
 const AFF0 = { particules: true, lignes: false, coupe: false, vecteurs: false, mortes: false, couleurProduits: false, murs: true, plafond: false, etiquettes: true, pieces: true, axe: "z", pos: null, densite: 2500, vitesseAnim: 1 };
 
 export function demarrer() {
@@ -109,6 +109,7 @@ export function demarrer() {
       const g = evapGeo(e, projet.chambre);
       g.cotes.forEach(c => c.fans.forEach(f => l.push(f.coude ? { c: f.coude.sortie, n: [0, 0, -1], r: f.coude.r, q: f.q } : { c: f.c, n: [c.u[0], c.u[1], 0], r: g.dv / 2, q: f.q })));
     });
+    projet.cellules.forEach(c => celluleGeo(c).places.forEach(pl => l.push({ c: pl.sortie.c, n: pl.sortie.n, r: pl.sortie.r, q: pl.q })));
     return l;
   }
   function majBoutonsCalcul() {
@@ -188,6 +189,7 @@ export function demarrer() {
     const k = dims(projet.chambre), v = {};
     if (liste === "evaps") { v.x = k.W / 2; v.y = 0.5; v.dir = 90; }
     else if (liste === "echelles") { v.x = k.W / 2; v.y = k.B / 2; v.n = 4; v.rangees = 1; }
+    else if (liste === "cellules") { v.x = k.W / 2; v.y = k.B / 2; }
     else if (liste === "portes") { v.x = k.W * 0.5; v.y = k.B; }
     else if (liste === "locaux") {
       // Collé à droite du local le plus à droite, aligné sur son bord avant
@@ -288,7 +290,7 @@ export function demarrer() {
     LISTES_PROJET[projet.type].forEach(l => {
       h += '<div class="grp"><div class="grp-h"><h3>' + nomType(l, true) + '</h3><button type="button" data-ajout="' + l + '" title="Ajouter : ' + nomType(l).toLowerCase() + '">+ Ajouter</button></div>';
       if (l === "pieces" && projet[l].length) h += '<label class="chk grp-chk"><input type="checkbox" data-affchk="pieces"' + (aff.pieces ? " checked" : "") + "> Afficher les pièces voisines</label>";
-      if (!projet[l].length) h += '<div class="vide">Aucun' + (l === "echelles" || l === "cloisons" || l === "portes" || l === "pieces" || l === "personnes" || l === "gaines" || l === "bouches" || l === "ctas" ? "e" : "") + " " + nomType(l).toLowerCase().replace("groupe d'échelles", "échelle") + "</div>";
+      if (!projet[l].length) h += '<div class="vide">Aucun' + (l === "echelles" || l === "cellules" || l === "cloisons" || l === "portes" || l === "pieces" || l === "personnes" || l === "gaines" || l === "bouches" || l === "ctas" ? "e" : "") + " " + nomType(l).toLowerCase().replace("groupe d'échelles", "échelle") + "</div>";
       projet[l].forEach(o => {
         h += '<button type="button" class="it' + (o.off ? " off" : "") + '" data-sel="' + o.id + '" aria-current="' + (sel === o.id) + '"><span class="ic" style="background:' + COULEURS[l] + '">' + ICONES[l] + '</span><span class="nm">' + esc(o.nom) + "<small>" + esc(resumeObjet(l, o, projet)) + "</small></span>" +
           (l === "evaps" ? '<span class="eye" role="button" tabindex="0" data-oeil="' + o.id + '" title="' + (o.off ? "Réafficher" : "Simuler sans cet appareil") + '">' + (o.off ? "◌" : "◉") + "</span>" : "") + "</button>";
@@ -307,7 +309,7 @@ export function demarrer() {
     }
     const V = volume(projet.chambre), Q = projet.evaps.filter(e => !e.off).reduce((s, e) => s + e.q, 0);
     let nE = 0, nP = 0, m = 0;
-    projet.echelles.forEach(e => { const g = echellesGeo(e); nE += g.total; nP += g.total * g.info.nb; m += g.total * g.info.masse; });
+    projet.echelles.concat(projet.cellules.map(c => celluleGeo(c).echelles)).forEach(e => { const g = echellesGeo(e); nE += g.total; nP += g.total * g.info.nb; m += g.total * g.info.masse; });
     $("resume").innerHTML = "<span>Volume</span><b>" + fr(V, 1) + " m³</b><span>Débit d'air</span><b>" + fr(Q, 0) + " m³/h</b><span>Taux de brassage</span><b>" + fr(V ? Q / V : 0, 1) + " vol/h</b>" +
       "<span>Échelles</span><b>" + nE + "</b><span>Produits</span><b>" + fr(nP, 0) + "</b><span>Masse de produits</span><b>" + fr(m / 1000, 2) + " t</b>";
   }
@@ -350,6 +352,13 @@ export function demarrer() {
       h += "</table>";
       if (mode === "cfd" && i.recalage && i.recalage.length) h += '<p class="hint">Portée calculée : distance où le jet retombe sous 0,25 m/s. ' + (i.passes > 1 ? "Les jets ont été recalés sur la portée constructeur quand l'espace libre le permettait." : "") + "</p>";
       h += "</div>";
+    }
+    if ((R.cellules || []).length) {
+      h += '<div class="sec"><h4>Cellules</h4><table class="tab-mini"><tr><th>Cellule</th><th class="n">Place</th><th class="n">Entre produits</th><th class="n">Contourne</th></tr>';
+      R.cellules.forEach(c => c.places.forEach(pl => {
+        h += '<tr><td>' + esc(c.nom) + '</td><td class="n">' + (pl.k + 1) + '</td><td class="n">' + (pl.v != null ? fr(pl.v, 2) + " m/s" : "–") + '</td><td class="n">' + (pl.partContour != null ? fr(pl.partContour * 100, 0) + " %" : "–") + "</td></tr>";
+      }));
+      h += '</table><p class="hint">Vitesse moyenne de l\'air entre les produits de chaque place ; « contourne » : part de l\'air qui passe à côté des produits. Calcul isotherme : le temps de refroidissement n\'est pas calculé.</p></div>';
     }
     if (R.echelles.some(e => e.info.nb)) {
       h += '<div class="sec"><h4>Air à travers les échelles</h4>';
@@ -581,7 +590,7 @@ export function demarrer() {
   $("mApercu").onclick = () => { mode = "apercu"; afficherChamp(); };
   $("mCfd").onclick = () => { if (champs.cfd) { mode = "cfd"; afficherChamp(); } };
   $("bCalcul").onclick = () => {
-    if (!projet.evaps.some(e => !e.off)) { toast("Ajoutez un évaporateur avant de lancer le calcul."); return; }
+    if (!projet.evaps.some(e => !e.off) && !projet.cellules.length) { toast("Ajoutez un évaporateur avant de lancer le calcul."); return; }
     debutCfd = Date.now();
     calculs.cfd(projet);
     $("prog").hidden = false; $("progT").textContent = "Préparation du calcul fin…"; $("progB").style.width = "0";

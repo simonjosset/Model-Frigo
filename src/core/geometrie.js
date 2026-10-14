@@ -175,6 +175,52 @@ export function echellesGeo(e) {
   return { info, res, a, b, chariots, box: bb, total: chariots.length };
 }
 
+/* ---------- Cellule de refroidissement : places côte à côte, ventilateur à l'arrière de chaque place ----------
+   Repère local : s le long du passage de l'air (dir), de la façade ouverte (-) vers le dos (+) ; t en travers.
+   De la façade au dos : zone des échelles (profondeur × D, plus le jeu), puis caisson des ventilateurs.
+   Parois latérales et toit sur la zone des échelles, cloison entre deux places. Étanche : le jeu autour des
+   échelles et le vide sous le toit sont bouchés (coussins gonflables), l'air ne passe que par les produits. */
+export const EP_CELLULE = 0.05, ECART_PROFONDEUR = 0.05;
+export function celluleGeo(c) {
+  const a = dirVec(c.dir), b = [-a[1], a[0]], ep = EP_CELLULE, j = c.jeu, n = Math.max(1, c.places);
+  const lp = c.W + 2 * j, Wint = n * lp + (n - 1) * ep, Wtot = Wint + 2 * ep;
+  const Lz = c.profondeur * c.D + (c.profondeur - 1) * ECART_PROFONDEUR + 2 * j, Ltot = Lz + c.caisson;
+  const Hc = c.hauteur == null ? c.H + 0.15 : Math.max(c.H + 0.02, c.hauteur), Ht = Hc + ep;
+  const sF = -Ltot / 2, sC = sF + Lz, sB = Ltot / 2;
+  const pt = (s, t, z) => [c.x + a[0] * s + b[0] * t, c.y + a[1] * s + b[1] * t, z];
+  const boiteL = (s0, s1, t0, t1, z0, z1) => {
+    const p = pt(s0, t0, 0), q = pt(s1, t1, 0);
+    return { x0: Math.min(p[0], q[0]), x1: Math.max(p[0], q[0]), y0: Math.min(p[1], q[1]), y1: Math.max(p[1], q[1]), z0, z1 };
+  };
+  const murs = [boiteL(sF, sB, -Wtot / 2, -Wint / 2, 0, Ht), boiteL(sF, sB, Wint / 2, Wtot / 2, 0, Ht), boiteL(sF, sC, -Wint / 2, Wint / 2, Hc, Ht)];
+  const joints = [];
+  const r = c.dv / 2, zf = Math.min(Math.max(c.H / 2, r + 0.05), Math.max(r + 0.05, Hc - r - 0.02));
+  const places = [];
+  for (let k = 0; k < n; k++) {
+    const t0 = -Wint / 2 + k * (lp + ep), t1 = t0 + lp, tc = (t0 + t1) / 2;
+    if (k > 0) murs.push(boiteL(sF, sC, t0 - ep, t0, 0, Hc));
+    if (c.etanche && j > 0.001) joints.push(boiteL(sF, sC, t0, t0 + j, 0, Hc), boiteL(sF, sC, t1 - j, t1, 0, Hc));
+    if (c.etanche && Hc - c.H > 0.01) joints.push(boiteL(sF, sC, t0, t1, c.H, Hc));
+    const haut = c.sortie === "haut";
+    places.push({
+      k, t0, t1, tc, q: c.q / 3600,
+      caisson: boiteL(sC, sB, t0 - (k ? ep : 0), t1, 0, Ht),
+      aspiration: pt(sC, tc, zf),
+      sortie: haut ? { c: pt((sC + sB) / 2, tc, Ht), n: [0, 0, 1], r } : { c: pt(sB, tc, zf), n: [a[0], a[1], 0], r }
+    });
+  }
+  // Échelles des places : un groupe d'échelles dont l'id est celui de la cellule (vitesses par étage, sélection des produits)
+  const zc = pt((sF + sC) / 2, 0, 0);
+  const echelles = {
+    id: c.id, nom: c.nom, x: zc[0], y: zc[1], dir: (c.dir + 90) % 360, n, rangees: c.profondeur, ecart: 2 * j + ep, allee: ECART_PROFONDEUR,
+    H: c.H, W: c.W, D: c.D, etages: c.etages, etagesCharges: c.etagesCharges, parEtage: c.parEtage, produit: c.produit
+  };
+  return {
+    a, b, lp, Wint, Wtot, Lz, Ltot, Hc, Ht, sF, sC, sB, zf, murs, joints, places, echelles, pt,
+    box: boiteL(sF, sB, -Wtot / 2, Wtot / 2, 0, Ht)
+  };
+}
+
 /* ---------- Obstacle (palette, bloc) ---------- */
 export function obstacleGeo(o) {
   const u = dirVec(o.dir), d = demi(u, o.L, o.l);
@@ -252,6 +298,7 @@ export function derriereDeflecteur(g, x, y, z, H) {
 export function boiteObjet(liste, o, ch) {
   if (liste === "evaps") return evapGeo(o, ch).box;
   if (liste === "echelles") return echellesGeo(o).box;
+  if (liste === "cellules") return celluleGeo(o).box;
   if (liste === "obstacles") return obstacleGeo(o).box;
   if (liste === "personnes") return personneGeo(o).box;
   if (liste === "locaux") return localGeo(o).box;

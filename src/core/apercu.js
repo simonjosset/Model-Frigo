@@ -1,7 +1,8 @@
 /* Aperçu instantané des flux : modèle de jets empirique (repris du Brassage de Frigobilan), passé en 3D.
    Pour chaque évaporateur : coupe verticale suivant l'axe de soufflage (fonction de courant, jet collé au
    plafond, arrivée sur la paroi d'en face, retour d'air côté sol), étalée en largeur par les jets des
-   ventilateurs, plus une reprise d'air vers l'aspiration. Ce n'est pas un calcul aéraulique. */
+   ventilateurs, plus une reprise d'air vers l'aspiration. Cellules : traversée des places à la vitesse
+   débitante, appel d'air devant la façade, jet de rejet des ventilateurs. Ce n'est pas un calcul aéraulique. */
 import { construireGrille, distanceLibre } from "./grille.js";
 import { creerChamp } from "./champ.js";
 
@@ -120,11 +121,40 @@ export function calculerApercu(projet, opts) {
     const visA = visibilite(G, asp[0], asp[1], Math.min(G.H - G.dz / 2, 1.0));
     jets.push({ e, geo, C, vis, visA, offs, Lu, s0, asp, Q: e.q / 3600 });
   }
+  // Cellules : chaque place est traversée à la vitesse débitante, l'air est appelé devant la façade,
+  // le ventilateur rejette un jet à l'arrière (jusqu'à la première paroi) ou vers le haut (nappe sous le plafond)
+  const cels = [];
+  for (const gc of G.cellules || []) gc.places.forEach(pl => {
+    const so = pl.sortie, haut = so.n[2] > 0, dep = 0.5 * Math.max(G.dx, G.dy) + 0.05;
+    const L = haut ? Math.max(0.1, G.H - so.c[2]) : dep + distanceLibre(G, so.c[0] + so.n[0] * dep, so.c[1] + so.n[1] * dep, Math.min(G.H - G.dz / 2, so.c[2]), so.n[0], so.n[1]);
+    cels.push({ c: gc.c, geo: gc.geo, pl, haut, L, vOut: pl.q / (Math.PI * so.r * so.r), vZone: pl.q / ((pl.t1 - pl.t0) * gc.geo.Hc), T: Math.max(0.5, gc.c.T) });
+  });
   for (let k = 0; k < G.nz; k++) for (let j = 0; j < G.ny; j++) for (let i = 0; i < G.nx; i++) {
     const c = i + G.nx * (j + G.ny * k);
     if (G.solide[c]) continue;
     const x = (i + 0.5) * G.dx, y = (j + 0.5) * G.dy, z = (k + 0.5) * G.dz, col = i + G.nx * j;
-    let sx = 0, sy = 0, sz = 0;
+    let sx = 0, sy = 0, sz = 0, zx = 0, zy = 0;
+    for (const K of cels) {
+      const geo = K.geo, a = geo.a, b = geo.b, pl = K.pl, rx = x - K.c.x, ry = y - K.c.y, s = rx * a[0] + ry * a[1], t = rx * b[0] + ry * b[1];
+      if (s >= geo.sF && s <= geo.sC && t >= pl.t0 && t <= pl.t1 && z <= geo.Hc) { zx += K.vZone * a[0]; zy += K.vZone * a[1]; }
+      else if (s < geo.sF) {
+        const P = geo.pt(geo.sF, pl.tc, geo.Hc / 2), qx = P[0] - x, qy = P[1] - y, qz = P[2] - z, d = Math.hypot(qx, qy, qz);
+        if (d > 0.05 && d < 6) { const vs = Math.min(K.vZone, pl.q / (2 * Math.PI * d * d)); sx += vs * qx / d; sy += vs * qy / d; sz += vs * qz / d; }
+      }
+      const so = pl.sortie, n0 = so.n, ox = x - so.c[0], oy = y - so.c[1], oz = z - so.c[2], sj = ox * n0[0] + oy * n0[1] + oz * n0[2];
+      const um = d => Math.min(K.vOut, 0.25 * K.T / Math.max(d, 0.3));
+      if (sj > 0 && sj < K.L) {
+        const px = ox - sj * n0[0], py = oy - sj * n0[1], pz = oz - sj * n0[2], bj = so.r + 0.22 * sj;
+        const fin = K.haut ? Math.min(1, (G.H - z) / (0.6 * (so.r + 0.22 * K.L))) : sstep((K.L - sj) / Math.max(0.15, 0.3 * K.L));
+        const v = um(sj) * Math.exp(-1.5 * (px * px + py * py + pz * pz) / (bj * bj)) * fin;
+        sx += v * n0[0]; sy += v * n0[1]; sz += v * n0[2];
+      }
+      if (K.haut) {
+        // Nappe sous le plafond, depuis l'aplomb du rejet
+        const rr = Math.hypot(ox, oy), bS = so.r + 0.22 * K.L;
+        if (rr > 0.05) { const ep = 0.15 + 0.08 * rr, vr = um(K.L) * (bS / (bS + rr)) * Math.exp(-Math.pow((G.H - z) / ep, 2)) * (1 - Math.exp(-rr * rr / (bS * bS))); sx += vr * ox / rr; sy += vr * oy / rr; }
+      }
+    }
     for (const J of jets) {
       if (J.coude) {
         const T = Math.max(0.5, J.e.T);
@@ -182,7 +212,7 @@ export function calculerApercu(projet, opts) {
       }
     }
     const ph = G.phi[c];
-    u[c] = sx * ph; v[c] = sy * ph; w[c] = sz * ph;
+    u[c] = sx * ph + zx; v[c] = sy * ph + zy; w[c] = sz * ph;
   }
   return creerChamp(G, u, v, w, { methode: "apercu", ms: Date.now() - t0, jets: jets.map(J => ({ id: J.e.id, Lf: J.C.Lf, Lb: J.C.Lb })) });
 }

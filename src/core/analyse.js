@@ -1,7 +1,7 @@
 /* Analyse d'un champ de vitesses : indicateurs de brassage, portée des jets, vitesse dans les
    échelles, alertes. Fonctionne sur l'aperçu comme sur le calcul fin. */
 import { vitesse } from "./champ.js";
-import { distanceLibre, plage, SOLIDE } from "./grille.js";
+import { distanceLibre, plage, cellule, SOLIDE } from "./grille.js";
 import { dims, volume, porteSnap, obstacleGeo, dansEncoche, distSegment, deflecteurGeo } from "./geometrie.js";
 
 function fr(x, d) { return (+x).toLocaleString("fr-FR", { minimumFractionDigits: d, maximumFractionDigits: d }); }
@@ -90,6 +90,9 @@ export function analyser(projet, F) {
     }
   }
 
+  // Cellules : air à travers les échelles de chaque place, part qui contourne les produits, dégagements
+  R.cellules = (G.cellules || []).map(gc => analyseCellule(F, G, gc, R, A));
+
   // Évaporateurs : portée constructeur face à l'espace libre, portée retrouvée par le calcul
   const portes = projet.portes.map(d => Object.assign({}, porteSnap(projet.chambre, d), { nom: d.nom }));
   for (const ev of G.evaps) {
@@ -123,9 +126,11 @@ export function analyser(projet, F) {
   R.retombees = (G.retombees || []).map(rt => analyseRetombee(F, G, rt, A));
 
   // Brassage global
-  if (!projet.evaps.length) A("bad", "Aucun évaporateur", "Ajoutez un évaporateur pour voir les flux d'air.");
-  else if (!G.evaps.length) A("bad", "Tous les évaporateurs sont masqués", "Réaffichez au moins un évaporateur.");
+  const nCel = (G.cellules || []).length;
+  if (!projet.evaps.length && !nCel) A("bad", "Aucun évaporateur", "Ajoutez un évaporateur pour voir les flux d'air.");
+  else if (!G.evaps.length && !nCel) A("bad", "Tous les évaporateurs sont masqués", "Réaffichez au moins un évaporateur.");
   else {
+    if (!G.evaps.length) A("warn", "Aucun évaporateur", "Seuls les ventilateurs des cellules font circuler l'air : ajoutez les évaporateurs de la chambre.");
     const c = R.couverture * 100;
     if (c < 70) A("bad", "Brassage insuffisant", "Seulement " + fr(c, 0) + " % du volume d'air au-dessus de " + fr(vmin, 2) + " m/s.");
     else if (c < 85) A("warn", "Brassage à surveiller", fr(c, 0) + " % du volume d'air au-dessus de " + fr(vmin, 2) + " m/s : les zones rouges sont à vérifier.");
@@ -136,6 +141,43 @@ export function analyser(projet, F) {
   (F.info.avert || []).forEach(t => A("warn", "Calcul", t));
   chevauchements(projet, G).forEach(t => A("warn", "Implantation", t));
   return R;
+}
+
+/* Cellule : pour chaque place, débit qui traverse la section au milieu de la zone des échelles, dans les
+   produits ou autour (jeu sur les côtés, vide sous le toit, sous les échelles) ; vitesse dans les échelles. */
+function analyseCellule(F, G, gc, R, A) {
+  const c = gc.c, geo = gc.geo, a = geo.a, ec = R.echelles.find(x => x.id === c.id), o = [0, 0, 0];
+  const ps = Math.min(G.dx, G.dy) / 2, pz = G.dz / 2, sM = (geo.sF + geo.sC) / 2;
+  const places = gc.places.map(pl => {
+    let dans = 0, autour = 0;
+    for (let t = pl.t0 + ps / 2; t < pl.t1; t += ps) for (let z = pz / 2; z < geo.Hc; z += pz) {
+      const P = geo.pt(sM, t, z); if (P[0] < 0 || P[1] < 0 || P[0] > G.W || P[1] > G.B) continue;
+      const [i, j, k] = cellule(G, P[0], P[1], z), cc = G.id(i, j, k); if (G.solide[cc]) continue;
+      vitesse(F, P[0], P[1], z, o);
+      const q = (o[0] * a[0] + o[1] * a[1]) * ps * pz;
+      if (G.produit[cc]) dans += q; else autour += q;
+    }
+    const tot = dans + autour, chs = ec ? ec.chariots.filter((x, n) => n % c.places === pl.k) : [];
+    return {
+      k: pl.k, q: pl.q * 3600, qMesure: Math.max(0, tot) * 3600, partContour: tot > 1e-4 ? Math.max(0, Math.min(1, autour / tot)) : null,
+      v: chs.length ? chs.reduce((s2, x) => s2 + x.v, 0) / chs.length : null, vMin: chs.length ? Math.min.apply(null, chs.map(x => x.vMin)) : null
+    };
+  });
+  const parts = places.filter(x => x.partContour != null).map(x => x.partContour), part = parts.length ? parts.reduce((s2, x) => s2 + x, 0) / parts.length : null;
+  const vs = places.filter(x => x.v != null).map(x => x.v), vMoy = vs.length ? vs.reduce((s2, x) => s2 + x, 0) / vs.length : null;
+  if (vMoy != null) A("ok", c.nom + " : air à travers les échelles", "Environ " + fr(vMoy, 2) + " m/s en moyenne entre les produits (" + c.places + " place" + (c.places > 1 ? "s" : "") + ", " + fr(c.q, 0) + " m³/h par ventilateur).", c.id);
+  if (part != null && part > 0.25) A("warn", c.nom + " : air qui contourne les produits", "Environ " + fr(part * 100, 0) + " % de l'air passe à côté des échelles (jeu sur les côtés, vide sous le toit, sous les produits) : " + (c.etanche ? "réduisez le jeu ou rapprochez le toit des échelles." : "prévoyez l'étanchéité (coussins gonflables) ou réduisez le jeu."), c.id);
+  // Dégagements : devant la façade (entrée de l'air) et derrière le rejet
+  const pl0 = gc.places[Math.floor(gc.places.length / 2)], dep = 0.5 * Math.max(G.dx, G.dy) + 0.05;
+  const F0 = geo.pt(geo.sF - dep, pl0.tc, Math.min(G.H - G.dz / 2, geo.Hc / 2)), Lav = dep + distanceLibre(G, F0[0], F0[1], F0[2], -a[0], -a[1]);
+  if (Lav < 0.8) A("warn", c.nom + " : façade encombrée", "Seulement " + fr(Lav, 2) + " m libres devant l'entrée des échelles : l'air de la chambre arrive mal dans la cellule.", c.id);
+  const so = pl0.sortie;
+  if (so.n[2] > 0) { if (G.H - so.c[2] < 0.3) A("warn", c.nom + " : rejet contre le plafond", "Moins de " + fr((G.H - so.c[2]) * 100, 0) + " cm entre le dessus de la cellule et le plafond.", c.id); }
+  else {
+    const Lr = dep + distanceLibre(G, so.c[0] + so.n[0] * dep, so.c[1] + so.n[1] * dep, Math.min(G.H - G.dz / 2, so.c[2]), so.n[0], so.n[1]);
+    if (Lr < 0.5) A("warn", c.nom + " : rejet contre une paroi", "Seulement " + fr(Lr * 100, 0) + " cm derrière les ventilateurs : prévoyez au moins 50 cm, ou un rejet vers le haut.", c.id);
+  }
+  return { id: c.id, nom: c.nom, places, partContour: part, vMoy };
 }
 
 /* Retombée : sous son bord bas, l'air passe soit au-dessus des échelles (bypass), soit à travers ou
@@ -233,6 +275,7 @@ function chevauchements(projet, G) {
   const bx = [];
   G.evaps.forEach(ev => bx.push({ nom: ev.e.nom, b: ev.geo.box }));
   G.echelles.forEach(eg => { const i = eg.geo.info; eg.geo.chariots.forEach((c, n) => bx.push({ nom: eg.e.nom, grp: eg.e.id, b: { x0: c.x0, x1: c.x1, y0: c.y0, y1: c.y1, z0: 0, z1: i.H } })); });
+  (G.cellules || []).forEach(gc => bx.push({ nom: gc.c.nom, grp: gc.c.id, b: gc.geo.box }));
   projet.obstacles.forEach(o => bx.push({ nom: o.nom, b: obstacleGeo(o).box }));
   (projet.deflecteurs || []).forEach(o => bx.push({ nom: o.nom, b: deflecteurGeo(o, projet.chambre).box }));
   const out = [], vu = {};

@@ -1,6 +1,6 @@
 /* Panneaux de propriétés : HTML des formulaires (chambre, objets, réglages) et lecture des saisies. */
 import { CATALOGUE } from "../core/produits.js";
-import { dims, surface, volume, evapGeo, echellesGeo, cloisonGeo, porteCloison, MURS_PIECE, localSurface, polygone, COINS, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "../core/geometrie.js";
+import { dims, surface, volume, evapGeo, echellesGeo, celluleGeo, cloisonGeo, porteCloison, MURS_PIECE, localSurface, polygone, COINS, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "../core/geometrie.js";
 import { MAILLES, TYPES_PROJET } from "../core/modele.js";
 import { ctaGeo, TYPES_BOUCHE, FORMES_GAINE, gaineMetres, texteSection } from "../core/composants.js";
 import { couleur } from "../core/champ.js";
@@ -160,13 +160,21 @@ function panneauEvap(p, e, R) {
 
 /* ---------- Échelles ---------- */
 function panneauEchelles(p, e, R, opts) {
-  opts = opts || {};
-  const g = echellesGeo(e), i = g.info;
+  const g = echellesGeo(e);
   let h = titre(e, "Groupe d'échelles chargées · " + g.total + " échelle" + (g.total > 1 ? "s" : ""));
   h += '<div class="sec"><h4>Implantation</h4><div class="grid">' + num(e, "n", "Échelles par rangée", "", { dec: 0 }) + num(e, "rangees", "Rangées", "", { dec: 0 }) +
     num(e, "ecart", "Écart entre échelles", "cm", { f: 100, dec: 0 }) + num(e, "allee", "Allée entre rangées", "m") +
     num(e, "x", "Position x (centre)", "m") + num(e, "y", "Position y (centre)", "m") + dirs(e, "dir", "Sens de la rangée (largeur des échelles)") + "</div></div>";
-  h += '<div class="sec"><h4>Échelle</h4><div class="grid">' + num(e, "H", "Hauteur", "m", { dec: 3 }) + num(e, "etages", "Étages (glissières)", "", { dec: 0 }) +
+  h += blocsEchelle(e, g, R, opts);
+  h += actions("echelles", e);
+  return h;
+}
+
+/* Échelle, produit et chargement (groupe d'échelles ou échelles d'une cellule), vitesses par étage */
+function blocsEchelle(e, g, R, opts) {
+  const i = g.info;
+  opts = opts || {};
+  let h = '<div class="sec"><h4>Échelle</h4><div class="grid">' + num(e, "H", "Hauteur", "m", { dec: 3 }) + num(e, "etages", "Étages (glissières)", "", { dec: 0 }) +
     num(e, "W", "Largeur", "m", { dec: 3 }) + num(e, "D", "Profondeur", "m", { dec: 3 }) + "</div></div>";
   const ref = CATALOGUE.some(c => c.ref === e.produit.ref) ? e.produit.ref : "perso";
   h += '<div class="sec"><h4>Produit</h4><div class="grid">' + sel({ ref }, "ref", "Type de produit", CATALOGUE.map(c => [c.ref, c.nom]).concat([["perso", "Personnalisé"]]), { w2: true, cle: "produit.ref" }) +
@@ -188,8 +196,31 @@ function panneauEchelles(p, e, R, opts) {
   ]);
   if (ec && i.nb) h += tableauVitesses(ec, opts);
   if (i.alertes.length) h += i.alertes.map(t => '<p class="hint" style="color:var(--yellow)">' + esc(t) + "</p>").join("");
-  h += "</div>" + actions("echelles", e);
-  return h;
+  return h + "</div>";
+}
+
+/* ---------- Cellule de refroidissement ---------- */
+function panneauCellule(p, c, R, opts) {
+  const g = celluleGeo(c), ge = echellesGeo(g.echelles), ac = R && (R.cellules || []).find(x => x.id === c.id);
+  let h = titre(c, "Cellule de refroidissement · " + c.places + " place" + (c.places > 1 ? "s" : "") + " · " + ge.total + " échelle" + (ge.total > 1 ? "s" : ""));
+  h += '<div class="sec"><h4>Cellule</h4><div class="grid">' + num(c, "places", "Places (échelles côte à côte)", "", { dec: 0 }) + num(c, "profondeur", "Échelles en profondeur par place", "", { dec: 0 }) +
+    num(c, "jeu", "Jeu autour des échelles", "cm", { f: 100, dec: 0 }) + num(c, "hauteur", "Hauteur intérieure", "m", { vide: "Auto : " + aff(g.Hc, 2) }) +
+    num(c, "x", "Position x (centre)", "m") + num(c, "y", "Position y (centre)", "m") + dirs(c, "dir", "Passage de l'air (façade → ventilateurs)") + "</div>";
+  h += '<label class="chk"><input type="checkbox" data-k="etanche" data-type="chk"' + (c.etanche ? " checked" : "") + "> Étanchéité autour des échelles (coussins gonflables)</label>";
+  h += '<p class="hint">Les échelles entrent par la façade ouverte ; chaque place a son ventilateur à l\'arrière, qui aspire l\'air de la chambre à travers les produits. Étanchéité : le jeu sur les côtés et le vide sous le toit sont fermés, l\'air ne passe que par les produits. Un jeu plus petit qu\'une maille de calcul (10 à 20 cm) n\'est pas vu par le calcul.</p></div>';
+  h += '<div class="sec"><h4>Ventilateurs</h4><div class="grid">' + num(c, "q", "Débit par ventilateur", "m³/h", { dec: 0 }) + num(c, "dv", "Diamètre des hélices", "mm", { f: 1000, dec: 0 }) +
+    sel(c, "sortie", "Rejet de l'air", [["arriere", "À l'arrière (horizontal)"], ["haut", "Vers le haut"]]) + num(c, "T", "Portée du rejet", "m", { dec: 1 }) +
+    num(c, "caisson", "Profondeur du caisson", "m") + "</div>";
+  const vF = c.q / 3600 / ((g.lp) * g.Hc);
+  const lignes = [["Encombrement", fr(g.Ltot, 2) + " × " + fr(g.Wtot, 2) + " × " + fr(g.Ht, 2) + " m"], ["Débit total", fr(c.q * c.places, 0) + " m³/h"],
+    ["Vitesse débitante dans une place", fr(vF, 2) + " m/s"]];
+  if (ac) ac.places.forEach(pl => {
+    if (pl.v != null) lignes.push(["Place " + (pl.k + 1) + " : air entre les produits", fr(pl.v, 2) + " m/s" + (pl.partContour != null ? " · " + fr(pl.partContour * 100, 0) + " % contourne" : "")]);
+  });
+  h += info(lignes);
+  h += '<p class="hint">Vitesse débitante : débit d\'un ventilateur divisé par la section de la place. « Contourne » : part de l\'air qui passe à côté des produits (jeu, dessus, sous les échelles), mesurée au milieu de la place. Calcul isotherme : la vitesse de l\'air est calculée, pas le temps de refroidissement.</p></div>';
+  h += blocsEchelle(c, ge, R, opts);
+  return h + actions("cellules", c);
 }
 
 function panneauCloison(p, c) {
@@ -358,6 +389,7 @@ export function panneauObjet(p, liste, o, R, opts) {
   if (liste === "deflecteurs") return panneauDeflecteur(p, o);
   if (liste === "evaps") return panneauEvap(p, o, R);
   if (liste === "echelles") return panneauEchelles(p, o, R, opts);
+  if (liste === "cellules") return panneauCellule(p, o, R, opts);
   if (liste === "cloisons") return panneauCloison(p, o);
   if (liste === "pieces") return panneauPiece(p, o);
   if (liste === "personnes") return panneauPersonne(p, o);
@@ -396,6 +428,7 @@ export function panneauReglages(p, a) {
 export function resumeObjet(liste, o, p) {
   if (liste === "evaps") return fr(o.q, 0) + " m³/h · " + fr(o.T, 0) + " m" + (o.type === "double" ? " · double flux" : "") + (o.coude ? " · coudes ↓" : "") + (o.retombee ? " · retombée" : "");
   if (liste === "echelles") { const g = echellesGeo(o); return g.total + " éch. · " + fr(g.total * g.info.nb, 0) + " produits"; }
+  if (liste === "cellules") return o.places + " place" + (o.places > 1 ? "s" : "") + " · " + fr(o.q, 0) + " m³/h par ventilateur" + (o.etanche ? " · étanche" : "");
   if (liste === "cloisons") { return "L " + fr(Math.hypot(o.x1 - o.x0, o.y1 - o.y0), 2) + " m" + (o.zh != null || o.zb > 0 ? " · partielle" : "") + (o.porte ? " · porte" + (o.porteOuverte ? " ouverte" : " fermée") : ""); }
   if (liste === "obstacles") return fr(o.L, 2) + " × " + fr(o.l, 2) + " × " + fr(o.h, 2) + " m" + (o.poreux > 0.01 ? " · ajouré" : "");
   if (liste === "personnes") return fr(o.taille, 2) + " m";

@@ -116,6 +116,21 @@ await page.screenshot({ path: path.join(SHOTS, "1c-deflecteur.png") });
 await page.click("#bAnnuler"); await page.click("#bAnnuler");
 check("annuler : déflecteur retiré", await page.evaluate(() => MF.projet().deflecteurs.length === 0));
 
+// Cellule de refroidissement : une place par échelle, ventilateur à l'arrière de chaque place
+await page.click('[data-ajout="cellules"]');
+check("cellule ajoutée et sélectionnée", await page.evaluate(() => MF.projet().cellules.length === 1) && await page.isVisible("#f_places") && await page.isVisible(".vgrille, #f_parEtage"));
+await page.fill("#f_places", "3"); await page.press("#f_places", "Enter");
+check("cellule : 3 places, étiquette dans la 3D", await page.evaluate(() => MF.projet().cellules[0].places === 3) && /Cellule 1 · 3 places/.test(await page.textContent(".vue3d-etiquettes")));
+const celOk = await attendre(page, () => { const c = MF.champs.apercu && MF.champs.apercu.R.cellules; return c && c.length === 1 && c[0].places.length === 3 && c[0].places.every(x => x.v > 0.2); }, 15000);
+check("cellule : air à travers les échelles de chaque place (aperçu)", celOk, await page.evaluate(() => JSON.stringify(MF.champs.apercu.R.cellules.map(c => c.places.map(x => x.v && +x.v.toFixed(2))))));
+await page.click('[data-tab="res"]');
+check("cellule : tableau dans les résultats", /Cellules/.test(await page.textContent("#pane-res")) && /contourne/i.test(await page.textContent("#pane-res")));
+await page.click('[data-tab="prop"]');
+await page.waitForTimeout(300);
+await page.screenshot({ path: path.join(SHOTS, "1d-cellule.png") });
+await page.click("#bAnnuler"); await page.click("#bAnnuler");
+check("annuler : cellule retirée", await page.evaluate(() => MF.projet().cellules.length === 0));
+
 // Calques
 for (const c of ["lignes", "coupe", "mortes", "couleurProduits"]) await page.click('[data-aff="' + c + '"]');
 check("coupe : barre de réglage affichée", await page.isVisible("#coupeBar"));

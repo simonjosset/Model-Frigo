@@ -1,8 +1,8 @@
 /* Maillage de la chambre en cellules cubiques (ou presque) : parois, évaporateurs, cloisons,
    obstacles pleins, échelles chargées traitées en milieu poreux. Commun à l'aperçu et au calcul fin. */
-import { dims, volume, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteCloison, distSegment, dansEncoche, retombeesEvap, basRetombeeAuto, deflecteurGeo, derriereDeflecteur } from "./geometrie.js";
+import { dims, volume, evapGeo, echellesGeo, celluleGeo, obstacleGeo, cloisonGeo, porteCloison, distSegment, dansEncoche, retombeesEvap, basRetombeeAuto, deflecteurGeo, derriereDeflecteur } from "./geometrie.js";
 
-export const SOLIDE = { fluide: 0, paroi: 1, evap: 2, cloison: 3, obstacle: 4, deflecteur: 5 };
+export const SOLIDE = { fluide: 0, paroi: 1, evap: 2, cloison: 3, obstacle: 4, deflecteur: 5, cellule: 6 };
 
 /* Taille de maille pour un nombre de cellules visé */
 export function tailleMaille(ch, cellules) {
@@ -25,7 +25,7 @@ export function construireGrille(projet, opts) {
   const dx = k.W / nx, dy = k.B / ny, dz = k.H / nz, n = nx * ny * nz;
   const solide = new Uint8Array(n), cH = new Float32Array(n), cV = new Float32Array(n), phi = new Float32Array(n).fill(1), produit = new Uint8Array(n);
   const id = (i, j, kk) => i + nx * (j + ny * kk);
-  const G = { nx, ny, nz, dx, dy, dz, n, W: k.W, B: k.B, H: k.H, k, solide, cH, cV, phi, produit, id, evaps: [], echelles: [], volumeChambre: volume(ch) };
+  const G = { nx, ny, nz, dx, dy, dz, n, W: k.W, B: k.B, H: k.H, k, solide, cH, cV, phi, produit, id, evaps: [], echelles: [], cellules: [], volumeChambre: volume(ch) };
 
   // Encoche du L
   if (k.L) {
@@ -79,6 +79,13 @@ export function construireGrille(projet, opts) {
       boite(g.box, 0, cc => { cH[cc] = Math.max(cH[cc], c); cV[cc] = Math.max(cV[cc], c); phi[cc] = Math.min(phi[cc], p); });
     } else boite(g.box, SOLIDE.obstacle);
   }
+  // Cellules : parois, toit, cloisons entre places, joints d'étanchéité et caissons des ventilateurs (pleins) ;
+  // aspiration (côté échelles) et rejet posés par le calcul sur les faces de chaque caisson
+  for (const c of projet.cellules || []) {
+    const geo = celluleGeo(c);
+    geo.murs.concat(geo.joints).forEach(b => boite(b, SOLIDE.cellule));
+    G.cellules.push({ c, geo, places: geo.places.map(pl => Object.assign({}, pl, { r: boite(pl.caisson, SOLIDE.cellule) })) });
+  }
   // Évaporateurs (caisson plein) : ventilateurs et aspiration posés par le calcul sur les faces du caisson
   for (const e of projet.evaps) {
     if (e.off) continue;
@@ -88,9 +95,9 @@ export function construireGrille(projet, opts) {
     G.evaps.push({ e, geo, r });
   }
   // Échelles chargées : milieu poreux sur la hauteur des produits
-  for (const e of projet.echelles) {
-    const geo = echellesGeo(e);
-    G.echelles.push({ e, geo });
+  for (const e of projet.echelles.concat(G.cellules.map(gc => gc.geo.echelles))) {
+    const geo = echellesGeo(e), cel = G.cellules.find(gc => gc.c.id === e.id);
+    G.echelles.push(cel ? { e, geo, cellule: cel.c } : { e, geo });
     if (!geo.info.nb) continue;
     for (const c of geo.chariots) {
       boite({ x0: c.x0, x1: c.x1, y0: c.y0, y1: c.y1, z0: geo.info.zBas, z1: geo.info.zHaut }, 0, cc => {

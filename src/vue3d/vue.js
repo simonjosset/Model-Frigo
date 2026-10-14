@@ -6,7 +6,7 @@ import {
   MeshLambertMaterial, MeshBasicMaterial, LineBasicMaterial, LineSegments, InstancedMesh, Object3D, Plane, DoubleSide, MOUSE, TOUCH, EdgesGeometry, Box3, TubeGeometry, QuadraticBezierCurve3
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { dims, polygone, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo, etirerRetombee, porteCloison, pieceGeo, localGeo, localPolygone, mursLocaux, porteSurMurs, emprise } from "../core/geometrie.js";
+import { dims, polygone, evapGeo, echellesGeo, celluleGeo, obstacleGeo, cloisonGeo, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo, etirerRetombee, porteCloison, pieceGeo, localGeo, localPolygone, mursLocaux, porteSurMurs, emprise } from "../core/geometrie.js";
 import { projetVisible, LISTES_PROJET } from "../core/modele.js";
 import { ctaGeo, plenumGeo, boucheGeo, TYPES_BOUCHE, gaineTrace, gaineSection, gaineEnveloppe, raccordBout, texteSection, routeOrtho } from "../core/composants.js";
 import { pointsAccroche, mesure } from "../core/cotes.js";
@@ -112,6 +112,9 @@ export function creerVue(conteneur, cb) {
     M.localMur = new MeshLambertMaterial({ color: s ? 0xb9c3d8 : 0xc9cfdb, transparent: true, opacity: s ? 0.42 : 0.5, depthWrite: false, side: DoubleSide });
     M.localPlafond = new MeshLambertMaterial({ color: s ? 0xb9c3d8 : 0xd5dae4, transparent: true, opacity: 0.2, depthWrite: false, side: DoubleSide });
     M.galva = new MeshLambertMaterial({ color: 0xc3cbd6 });
+    M.celluleMur = new MeshLambertMaterial({ color: s ? 0xc9d2de : 0xb3bdca, transparent: true, opacity: 0.45, depthWrite: false, side: DoubleSide });
+    M.joint = new MeshLambertMaterial({ color: 0x3a4150, transparent: true, opacity: 0.8 });
+    M.grilleVent = new MeshLambertMaterial({ color: 0x3d7bff, transparent: true, opacity: 0.35, side: DoubleSide, depthWrite: false });
     M.textile = new MeshLambertMaterial({ color: 0xf4f6fb, transparent: true, opacity: 0.93 });
     M.piquage = new MeshLambertMaterial({ color: 0x2b3140, side: DoubleSide });
     M.gilet = new MeshLambertMaterial({ color: 0xff8a2a });
@@ -306,6 +309,38 @@ export function creerVue(conteneur, cb) {
     });
     demander();
   }
+  /* Cellule : parois et toit translucides, caisson et ventilateur de chaque place, échelles chargées dedans */
+  function construireCellule(c) {
+    const g = new Group(), geo = celluleGeo(c), a = geo.a, b = geo.b;
+    const pave = (bx, mat, traits) => {
+      const m = boite(bx.x1 - bx.x0, bx.y1 - bx.y0, bx.z1 - bx.z0, mat, (bx.x0 + bx.x1) / 2, (bx.y0 + bx.y1) / 2, (bx.z0 + bx.z1) / 2); g.add(m);
+      if (traits) aretes(g, m);
+      return m;
+    };
+    geo.murs.forEach(bx => pave(bx, M.celluleMur, true));
+    geo.joints.forEach(bx => pave(bx, M.joint, false));
+    const disque = (cc, n, r, mat) => {
+      const d = new Mesh(new CircleGeometry(r * 0.92, 28), mat); d.up.set(0, 0, 1); d.position.set(cc[0] + n[0] * 0.006, cc[1] + n[1] * 0.006, cc[2] + n[2] * 0.006);
+      d.lookAt(d.position.x + n[0], d.position.y + n[1], d.position.z + n[2]); g.add(d);
+      const an = new Mesh(new RingGeometry(r * 0.92, r, 28), M.anneau); an.position.copy(d.position).addScaledVector(new Vector3(n[0], n[1], n[2]), 0.002); an.quaternion.copy(d.quaternion); g.add(an);
+    };
+    geo.places.forEach(pl => {
+      pave(pl.caisson, M.caisson, true);
+      // Face d'aspiration (côté échelles) : grille bleue et hélice ; rejet : anneau à l'arrière ou sur le dessus
+      const n = [-a[0], -a[1], 0], w = pl.t1 - pl.t0, q = new Mesh(new BoxGeometry(w * 0.96, geo.Hc * 0.96, 0.01), M.grilleVent);
+      q.up.set(0, 0, 1); q.position.set(pl.aspiration[0] + n[0] * 0.008, pl.aspiration[1] + n[1] * 0.008, geo.Hc / 2); q.lookAt(q.position.x + n[0], q.position.y + n[1], q.position.z); g.add(q);
+      disque(pl.aspiration, n, pl.sortie.r, M.helice);
+      disque(pl.sortie.c, pl.sortie.n, pl.sortie.r, M.helice);
+    });
+    // Flèche sur le toit : sens de passage de l'air
+    const f = new Mesh(new ConeGeometry(0.12, 0.34, 12), M.fleche), m0 = geo.pt((geo.sF + geo.sC) / 2, 0, geo.Ht + 0.03);
+    f.position.set(m0[0], m0[1], m0[2]); f.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), new Vector3(a[0], a[1], 0)); g.add(f);
+    // Échelles et produits (même id que la cellule : vitesses par étage, choix d'un produit)
+    const ech = construireEchelles(geo.echelles);
+    ech.children.slice().forEach(o => g.add(o));
+    if (ech.userData.mP) g.userData.mP = ech.userData.mP;
+    return g;
+  }
   function construireCloison(c) {
     const g = new Group(), cg = cloisonGeo(c, projet.chambre), po = porteCloison(c, projet.chambre), rot = Math.atan2(cg.uy, cg.ux);
     // Morceau de cloison de t0 à t1 (le long de la cloison) et de z0 à z1
@@ -489,7 +524,7 @@ export function creerVue(conteneur, cb) {
     geo.setAttribute("position", new Float32BufferAttribute(pos, 3)); geo.setAttribute("normal", new Float32BufferAttribute(nor, 3));
     return geo;
   }
-  const CONSTR = { evaps: construireEvap, echelles: construireEchelles, cloisons: construireCloison, obstacles: construireObstacle, portes: construirePorte, deflecteurs: construireDeflecteur, pieces: construirePiece, personnes: construirePersonne, locaux: construireLocal, ctas: construireCta, plenums: construirePlenum, bouches: construireBouche, gaines: construireGaine };
+  const CONSTR = { evaps: construireEvap, echelles: construireEchelles, cellules: construireCellule, cloisons: construireCloison, obstacles: construireObstacle, portes: construirePorte, deflecteurs: construireDeflecteur, pieces: construirePiece, personnes: construirePersonne, locaux: construireLocal, ctas: construireCta, plenums: construirePlenum, bouches: construireBouche, gaines: construireGaine };
 
   function construireObjet(liste, o) {
     if (objets[o.id]) {
@@ -543,6 +578,7 @@ export function creerVue(conteneur, cb) {
     const ajoute = (id, txt, pos, cls) => { const d = document.createElement("div"); d.className = "etq " + (cls || ""); d.textContent = txt; calque.appendChild(d); etiq.push({ id, d, pos: new Vector3(pos[0], pos[1], pos[2]) }); };
     pr.evaps.forEach(e => { const z = evapGeo(e, pr.chambre).z; ajoute(e.id, e.nom, [e.x, e.y, z.zt + 0.25], "ev"); });
     pr.echelles.forEach(e => { const g = echellesGeo(e); ajoute(e.id, e.nom + " · " + g.total + " éch.", [e.x, e.y, g.info.H + 0.25], "ec"); });
+    (pr.cellules || []).forEach(c => { const g = celluleGeo(c); ajoute(c.id, c.nom + " · " + c.places + " place" + (c.places > 1 ? "s" : ""), [c.x, c.y, g.Ht + 0.3], "ec"); });
     pr.personnes.forEach(o => ajoute(o.id, o.nom + " · " + fr(o.taille, 2) + " m", [o.x, o.y, o.taille + 0.22], "pe"));
     pr.locaux.forEach(o => ajoute(o.id, o.nom + " · " + signe(o.T), [o.x, o.y, o.H + 0.3], "lc"));
     if (pr.type === "batiment") pr.obstacles.forEach(o => ajoute(o.id, o.nom, [o.x, o.y, o.zb + o.h + 0.3], "ob"));
@@ -675,7 +711,7 @@ export function creerVue(conteneur, cb) {
     cb.onPick && cb.onPick(null);
   });
   function objetProjet(id) {
-    for (const l of ["evaps", "echelles", "cloisons", "obstacles", "portes", "deflecteurs", "pieces", "personnes", "locaux", "ctas", "plenums", "gaines", "bouches"]) { const o = (projet[l] || []).find(x => x.id === id); if (o) return o; }
+    for (const l of ["evaps", "echelles", "cellules", "cloisons", "obstacles", "portes", "deflecteurs", "pieces", "personnes", "locaux", "ctas", "plenums", "gaines", "bouches"]) { const o = (projet[l] || []).find(x => x.id === id); if (o) return o; }
     return null;
   }
 

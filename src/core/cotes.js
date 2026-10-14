@@ -1,7 +1,7 @@
 /* Cotes (mesures de longueur point à point) : points d'accroche de la chambre et des objets, mesure.
    Module pur. Une cote est enregistrée dans le projet : { id, a: [x, y, z], b: [x, y, z] }. */
 import { ctaGeo, plenumGeo, boucheGeo } from "./composants.js";
-import { dims, polygone, pieceGeo, personneGeo, localPolygone, mursLocaux, porteSurMurs, evapGeo, echellesGeo, obstacleGeo, cloisonGeo, porteCloison, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "./geometrie.js";
+import { dims, polygone, pieceGeo, personneGeo, localPolygone, mursLocaux, porteSurMurs, evapGeo, echellesGeo, celluleGeo, obstacleGeo, cloisonGeo, porteCloison, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "./geometrie.js";
 
 /* Sommets d'une boîte alignée sur les axes */
 function sommetsBoite(b, nom, out) {
@@ -42,6 +42,7 @@ export function pointsAccroche(projet) {
     sommetsPanneau(c.x0, c.y0, c.x1, c.y1, g.ep, g.zb, g.zh, c.nom, out);
     if (po) for (const t of [po.t0, po.t1]) for (const z of [po.zb, po.zh]) out.push({ p: [c.x0 + g.ux * t, c.y0 + g.uy * t, z], nom: c.nom + " · porte" });
   });
+  (projet.cellules || []).forEach(c => sommetsBoite(celluleGeo(c).box, c.nom, out));
   projet.obstacles.forEach(o => sommetsBoite(obstacleGeo(o).box, o.nom, out));
   const batiment = projet.type === "batiment", murs = batiment ? mursLocaux(projet.locaux) : null;
   projet.portes.forEach(d => {

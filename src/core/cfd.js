@@ -3,7 +3,8 @@
    Chaque pas : advection semi-lagrangienne, diffusion implicite (viscosité turbulente), freinage des
    milieux poreux (échelles chargées), projection de pression (gradient conjugué préconditionné).
    Ventilateurs : débit imposé sur les faces du caisson couvertes par chaque hélice ; aspiration :
-   débit imposé sur la face arrière (simple flux) ou le dessous (double flux).
+   débit imposé sur la face arrière (simple flux) ou le dessous (double flux). Cellules : aspiration sur la
+   face avant du caisson de chaque place (à travers les échelles), rejet à l'arrière ou sur le dessus.
    Turbulence : viscosité constante dans chaque jet, réglée pour que le jet libre retrouve 0,25 m/s
    à la portée constructeur (solution de Schlichting du jet rond : u = 3K / (8π ν x)), et viscosité
    faible dans le reste de la chambre. Le résultat est la moyenne de fin de calcul. */
@@ -151,6 +152,33 @@ export function preparer(G, opts) {
   }
   S.jets = jets;
 
+  // Cellules : chaque ventilateur aspire sur la face avant de son caisson (à travers les échelles de sa place)
+  // et rejette le même débit à l'arrière ou sur le dessus, sur la surface de l'hélice
+  const jetsC = [], prises = new Set();
+  for (const gc of G.cellules || []) {
+    const c = gc.c, geo = gc.geo, a = geo.a, b = geo.b, axe = a[0] !== 0 ? 0 : 1, sens = a[0] !== 0 ? a[0] : a[1];
+    const tLoc = f => (f.x - c.x) * b[0] + (f.y - c.y) * b[1], tol = 0.5 * Math.max(dx, dy);
+    for (const pl of gc.places) {
+      const nom = c.nom + (gc.places.length > 1 ? " (place " + (pl.k + 1) + ")" : "");
+      let fa = facesCaisson(pl.r, axe, -sens).filter(f => !prises.has(f.t + f.id) && f.z < geo.Hc + tol && tLoc(f) > pl.t0 - tol && tLoc(f) < pl.t1 + tol);
+      if (!fa.length) { S.avert.push(nom + " : aspiration du ventilateur bouchée."); continue; }
+      const so = pl.sortie, haut = so.n[2] > 0;
+      const fs = haut ? facesCaisson(pl.r, 2, 1) : facesCaisson(pl.r, axe, sens);
+      const libres = fs.filter(f => !prises.has(f.t + f.id));
+      if (!libres.length) { S.avert.push(nom + " : rejet du ventilateur contre une paroi, ventilateur ignoré."); continue; }
+      // Faces couvertes par l'hélice (au moins la plus proche)
+      const d2 = f => haut ? Math.pow(f.x - so.c[0], 2) + Math.pow(f.y - so.c[1], 2) : Math.pow(tLoc(f) - pl.tc, 2) + Math.pow(f.z - so.c[2], 2);
+      let sor = libres.filter(f => d2(f) <= so.r * so.r);
+      if (!sor.length) sor = [libres.reduce((m, f) => (!m || d2(f) < d2(m) ? f : m), null)];
+      const Aa = fa.reduce((s2, f) => s2 + f.A, 0), As = sor.reduce((s2, f) => s2 + f.A, 0), q = pl.q;
+      fa.forEach(f => { prises.add(f.t + f.id); imposer(f, sens * q / Aa); });
+      sor.forEach(f => { prises.add(f.t + f.id); imposer(f, (haut ? 1 : sens) * q / As); });
+      jetsC.push({ c, pl, O: so.c, n: so.n, r: so.r, K: q * q / As, q, T: Math.max(0.5, c.T) });
+      S.sorties.push({ id: c.id, nom, cote: pl.k, faces: sor.length, A: As, v: q / As, cellule: true });
+    }
+  }
+  S.jetsCellules = jetsC;
+
   // Viscosité turbulente : réglée jet par jet sur la portée constructeur
   const nu = new Float32Array(G.n).fill(R.nuPiece), H = G.H;
   for (const J of jets) {
@@ -176,6 +204,21 @@ export function preparer(G, opts) {
       const sp = Math.max(0, s), bh = half + 0.25 * sp, bz = J.geo.dv / 2 + 0.25 * sp;
       const rr = x * p[0] + y * p[1], dzz = zz < z.zc ? zz - z.zc : Math.max(0, zz - z.zc - att * (H - z.zc));
       let w = Math.exp(-0.5 * (rr * rr / (bh * bh) + dzz * dzz / (bz * bz)));
+      if (s > 1.2 * T) w *= Math.exp(-Math.pow((s - 1.2 * T) / (0.4 * T), 2));
+      const val = R.nuPiece + w * (J.nu - R.nuPiece);
+      if (val > nu[c]) nu[c] = val;
+    }
+  }
+  // Rejets des cellules : cône de viscosité de jet le long de l'axe de chaque hélice
+  for (const J of jetsC) {
+    J.nu = Math.max(R.nuPiece, R.kPortee * 3 * J.K / (8 * Math.PI * 0.25 * J.T));
+    const T = J.T, n0 = J.n;
+    for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const c = cid(i, j, k); if (solide[c]) continue;
+      const rx = (i + 0.5) * dx - J.O[0], ry = (j + 0.5) * dy - J.O[1], rz = (k + 0.5) * dz - J.O[2];
+      const s = rx * n0[0] + ry * n0[1] + rz * n0[2]; if (s < -0.3 || s > 2.5 * T) continue;
+      const qx = rx - s * n0[0], qy = ry - s * n0[1], qz = rz - s * n0[2], rr2 = qx * qx + qy * qy + qz * qz, bb = J.r + 0.25 * Math.max(0, s);
+      let w = Math.exp(-0.5 * rr2 / (bb * bb));
       if (s > 1.2 * T) w *= Math.exp(-Math.pow((s - 1.2 * T) / (0.4 * T), 2));
       const val = R.nuPiece + w * (J.nu - R.nuPiece);
       if (val > nu[c]) nu[c] = val;
@@ -424,7 +467,7 @@ export function demarrer(G, opts) {
   opts = opts || {};
   const S = preparer(G, opts);
   if (opts.init) initialiser(S, opts.init);
-  const Q = S.jets.reduce((s, J) => s + J.q, 0) || 0.1;
+  const Q = S.jets.concat(S.jetsCellules).reduce((s, J) => s + J.q, 0) || 0.1;
   const tMel = G.volumeChambre / Q; // temps de renouvellement de l'air de la chambre
   const tFin = opts.tFin || Math.min(150, Math.max(30, 0.6 * tMel + 20));
   const nPas = Math.max(40, Math.min(opts.pasMax || 1500, Math.ceil(tFin / S.dt)));
