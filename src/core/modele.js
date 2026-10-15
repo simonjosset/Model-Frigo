@@ -73,7 +73,7 @@ export function celluleDefaut(ch) {
   };
 }
 export function cloisonDefaut(ch) {
-  return { x0: ch.longueur * 0.65, y0: 0, x1: ch.longueur * 0.65, y1: ch.largeur * 0.6, ep: 0.1, zb: 0, zh: null,
+  return { x0: ch.longueur * 0.65, y0: 0, x1: ch.longueur * 0.65, y1: ch.largeur * 0.6, ep: 0.1, zb: 0, zh: null, horizontale: false,
     porte: false, porteLargeur: 0.9, porteHauteur: 2, portePos: null, porteOuverte: true };
 }
 export function obstacleDefaut(ch) {
@@ -248,6 +248,8 @@ export function normaliserObjet(liste, o, ch) {
   } else if (liste === "cloisons") {
     r.x0 = n(r.x0, d.x0); r.y0 = n(r.y0, d.y0); r.x1 = n(r.x1, d.x1); r.y1 = n(r.y1, d.y1);
     r.ep = n(r.ep, 0.1, 0.02, 1); r.zb = n(r.zb, 0, 0, 20); r.zh = nOuNull(r.zh, 0.1, 20);
+    // Horizontale (faux plafond) : rectangle entre les coins (x0, y0) et (x1, y1), dessous à zb, épaisseur ep
+    r.horizontale = !!r.horizontale;
     // Porte dans la cloison : largeur, hauteur, position de son milieu depuis le début de la cloison (vide = au milieu)
     r.porte = !!r.porte; r.porteLargeur = n(r.porteLargeur, 0.9, 0.3, 20); r.porteHauteur = n(r.porteHauteur, 2, 0.3, 20);
     r.portePos = nOuNull(r.portePos, 0, 200); r.porteOuverte = !(r.porteOuverte === false || r.porteOuverte === "false");

@@ -262,6 +262,16 @@ export function demarrer() {
     } else {
       const t = trouver(projet, sel); if (!t) return;
       const o = t.objet;
+      if (cle === "horizontale" && t.liste === "cloisons") {
+        // Passage en faux plafond : rectangle d'au moins 1 m de côté, dessous à 80 % de la hauteur ; retour en cloison : depuis le sol
+        const H = dims(projet.chambre).H;
+        if (v) {
+          const r3 = x => Math.round(x * 1000) / 1000;
+          if (Math.abs(o.x1 - o.x0) < 0.5) o.x1 = r3(o.x0 + (o.x0 + 3 <= dims(projet.chambre).W ? 3 : -3));
+          if (Math.abs(o.y1 - o.y0) < 0.5) o.y1 = r3(o.y0 + (o.y0 + 3 <= dims(projet.chambre).B ? 3 : -3));
+          o.zb = Math.round(H * 0.8 * 20) / 20; o.zh = null; o.porte = false;
+        } else { o.zb = 0; o.zh = null; }
+      }
       if (cle === "produit.ref") { if (v !== "perso") o.produit = produitDuCatalogue(v); else o.produit = Object.assign({}, o.produit, { ref: "perso" }); }
       else if (cle.startsWith("produit.")) { o.produit[cle.slice(8)] = v; if (cle !== "produit.nom") o.produit.ref = "perso"; if (cle !== "produit.nom" && o.produit.ref === "perso" && !/\(modifié\)$|^Produit/.test(o.produit.nom)) o.produit.nom = o.produit.nom + " (modifié)"; }
       else if (cle.startsWith("points.")) { const [, i, j] = cle.split("."); if (o.points[+i]) o.points[+i][+j] = v; }

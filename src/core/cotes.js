@@ -1,7 +1,7 @@
 /* Cotes (mesures de longueur point à point) : points d'accroche de la chambre et des objets, mesure.
    Module pur. Une cote est enregistrée dans le projet : { id, a: [x, y, z], b: [x, y, z] }. */
 import { ctaGeo, plenumGeo, boucheGeo } from "./composants.js";
-import { dims, polygone, pieceGeo, personneGeo, localPolygone, mursLocaux, porteSurMurs, evapGeo, echellesGeo, celluleGeo, obstacleGeo, cloisonGeo, porteCloison, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "./geometrie.js";
+import { dims, polygone, pieceGeo, personneGeo, localPolygone, mursLocaux, porteSurMurs, evapGeo, echellesGeo, celluleGeo, obstacleGeo, cloisonGeo, cloisonHorizGeo, porteCloison, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "./geometrie.js";
 
 /* Sommets d'une boîte alignée sur les axes */
 function sommetsBoite(b, nom, out) {
@@ -38,6 +38,7 @@ export function pointsAccroche(projet) {
     g.chariots.forEach(c => sommetsBoite({ x0: c.x0, x1: c.x1, y0: c.y0, y1: c.y1, z0: 0, z1: H }, e.nom, out));
   });
   projet.cloisons.forEach(c => {
+    if (c.horizontale) { sommetsBoite(cloisonHorizGeo(c, ch).box, c.nom, out); return; }
     const g = cloisonGeo(c, ch), po = porteCloison(c, ch);
     sommetsPanneau(c.x0, c.y0, c.x1, c.y1, g.ep, g.zb, g.zh, c.nom, out);
     if (po) for (const t of [po.t0, po.t1]) for (const z of [po.zb, po.zh]) out.push({ p: [c.x0 + g.ux * t, c.y0 + g.uy * t, z], nom: c.nom + " · porte" });

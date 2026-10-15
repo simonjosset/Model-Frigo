@@ -6,7 +6,7 @@ import {
   MeshLambertMaterial, MeshBasicMaterial, LineBasicMaterial, LineSegments, InstancedMesh, Object3D, Plane, DoubleSide, MOUSE, TOUCH, EdgesGeometry, Box3, TubeGeometry, QuadraticBezierCurve3
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { dims, polygone, evapGeo, echellesGeo, celluleGeo, obstacleGeo, cloisonGeo, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo, etirerRetombee, porteCloison, pieceGeo, localGeo, localPolygone, mursLocaux, porteSurMurs, emprise } from "../core/geometrie.js";
+import { dims, polygone, evapGeo, echellesGeo, celluleGeo, obstacleGeo, cloisonGeo, cloisonHorizGeo, porteSnap, retombeesEvap, basRetombeeAuto, deflecteurGeo, etirerRetombee, porteCloison, pieceGeo, localGeo, localPolygone, mursLocaux, porteSurMurs, emprise } from "../core/geometrie.js";
 import { projetVisible, LISTES_PROJET } from "../core/modele.js";
 import { ctaGeo, plenumGeo, boucheGeo, TYPES_BOUCHE, gaineTrace, gaineSection, gaineEnveloppe, raccordBout, texteSection, routeOrtho } from "../core/composants.js";
 import { pointsAccroche, mesure } from "../core/cotes.js";
@@ -342,6 +342,12 @@ export function creerVue(conteneur, cb) {
     return g;
   }
   function construireCloison(c) {
+    if (c.horizontale) {
+      // Faux plafond : panneau horizontal
+      const g = new Group(), b = cloisonHorizGeo(c, projet.chambre).box;
+      const m = boite(Math.max(0.01, b.x1 - b.x0), Math.max(0.01, b.y1 - b.y0), b.z1 - b.z0, M.cloison, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, (b.z0 + b.z1) / 2);
+      g.add(m); aretes(g, m); return g;
+    }
     const g = new Group(), cg = cloisonGeo(c, projet.chambre), po = porteCloison(c, projet.chambre), rot = Math.atan2(cg.uy, cg.ux);
     // Morceau de cloison de t0 à t1 (le long de la cloison) et de z0 à z1
     const morceau = (t0, t1, z0, z1, mat, ep) => {
@@ -552,8 +558,10 @@ export function creerVue(conteneur, cb) {
     selBox.position.copy(c); scene.add(selBox);
     if (o.userData.liste === "cloisons") {
       const cl = projet.cloisons.find(x => x.id === selId);
+      // Poignées aux deux bouts (aux deux coins opposés pour un faux plafond, sur son dessus)
+      const zp = cl && cl.horizontale ? cloisonHorizGeo(cl, projet.chambre).box.z1 : 0;
       if (cl) [[cl.x0, cl.y0, "a"], [cl.x1, cl.y1, "b"]].forEach(([x, y, q]) => {
-        const p = new Mesh(new SphereGeometry(0.12, 16, 12), M.poignee); p.position.set(x, y, 0.12); p.userData.poignee = q; scene.add(p); poignees.push(p);
+        const p = new Mesh(new SphereGeometry(0.12, 16, 12), M.poignee); p.position.set(x, y, zp + 0.12); p.userData.poignee = q; p.userData.z = zp; scene.add(p); poignees.push(p);
       });
     }
     // Retombée d'un évaporateur : une poignée à chaque bout, au bas du panneau, pour régler sa longueur
@@ -641,7 +649,7 @@ export function creerVue(conteneur, cb) {
   }
   function objetSous(ev) {
     viser(ev);
-    if (poignees.length) { const hp = ray.intersectObjects(poignees, false); if (hp.length) return { poignee: hp[0].object.userData.poignee }; }
+    if (poignees.length) { const hp = ray.intersectObjects(poignees, false); if (hp.length) return { poignee: hp[0].object.userData.poignee, z: hp[0].object.userData.z || 0 }; }
     const hits = ray.intersectObjects(pickables, true);
     for (const h of hits) {
       if (h.object.userData && h.object.userData.decor) continue; // murs des pièces voisines : on vise à travers
@@ -660,11 +668,12 @@ export function creerVue(conteneur, cb) {
     bas = { x: ev.clientX, y: ev.clientY, t: performance.now() };
     if (coter || tracer) return; // modes cote et tracé : un appui pose un point, un glissé tourne la vue
     const o = objetSous(ev);
-    if (o && o.poignee) { glisse = { poignee: o.poignee, id: selId }; controls.enabled = false; el.setPointerCapture(ev.pointerId); return; }
+    if (o && o.poignee) { glisse = { poignee: o.poignee, id: selId, z: o.z }; controls.enabled = false; el.setPointerCapture(ev.pointerId); return; }
     if (o && o.id && o.id === selId) {
-      const ob = objetProjet(selId), p = solSous(ev, 0);
+      const ob0 = objetProjet(selId), zp = o.liste === "cloisons" && ob0 && ob0.horizontale ? cloisonHorizGeo(ob0, projet.chambre).box.z1 : 0;
+      const ob = ob0, p = solSous(ev, zp);
       if (ob && p && (ob.x != null || o.liste === "cloisons")) {
-        glisse = { id: selId, liste: o.liste, dx: (o.liste === "cloisons" ? ob.x0 : ob.x) - p.x, dy: (o.liste === "cloisons" ? ob.y0 : ob.y) - p.y, depart: o.liste === "cloisons" ? [ob.x1 - ob.x0, ob.y1 - ob.y0] : null, bouge: false };
+        glisse = { id: selId, liste: o.liste, z: zp, dx: (o.liste === "cloisons" ? ob.x0 : ob.x) - p.x, dy: (o.liste === "cloisons" ? ob.y0 : ob.y) - p.y, depart: o.liste === "cloisons" ? [ob.x1 - ob.x0, ob.y1 - ob.y0] : null, bouge: false };
         controls.enabled = false; el.setPointerCapture(ev.pointerId);
       }
     }
@@ -678,7 +687,7 @@ export function creerVue(conteneur, cb) {
     }
     const pas = ev.shiftKey ? 0.01 : 0.05, ar = v => Math.round(v / pas) * pas;
     const rt = glisse.poignee && typeof glisse.poignee === "object" ? glisse.poignee : null;
-    const p = solSous(ev, rt ? rt.z : 0); if (!p) return;
+    const p = solSous(ev, rt ? rt.z : glisse.z || 0); if (!p) return;
     glisse.bouge = true;
     if (rt) {
       const e = objetProjet(glisse.id);

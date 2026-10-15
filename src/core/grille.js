@@ -1,6 +1,6 @@
 /* Maillage de la chambre en cellules cubiques (ou presque) : parois, évaporateurs, cloisons,
    obstacles pleins, échelles chargées traitées en milieu poreux. Commun à l'aperçu et au calcul fin. */
-import { dims, volume, evapGeo, echellesGeo, celluleGeo, obstacleGeo, cloisonGeo, porteCloison, distSegment, dansEncoche, retombeesEvap, basRetombeeAuto, deflecteurGeo, derriereDeflecteur } from "./geometrie.js";
+import { dims, volume, evapGeo, echellesGeo, celluleGeo, obstacleGeo, cloisonGeo, cloisonHorizGeo, porteCloison, distSegment, dansEncoche, retombeesEvap, basRetombeeAuto, deflecteurGeo, derriereDeflecteur } from "./geometrie.js";
 
 export const SOLIDE = { fluide: 0, paroi: 1, evap: 2, cloison: 3, obstacle: 4, deflecteur: 5, cellule: 6 };
 
@@ -47,6 +47,7 @@ export function construireGrille(projet, opts) {
   const bas = basRetombeeAuto(projet);
   G.retombees = projet.evaps.reduce((l, e) => l.concat(retombeesEvap(e, ch, bas)), []);
   for (const c of projet.cloisons.concat(G.retombees)) {
+    if (c.horizontale) { boite(cloisonHorizGeo(c, ch).box, SOLIDE.cloison); continue; } // faux plafond : une couche pleine
     const g = cloisonGeo(c, ch), seuil = Math.max(g.ep / 2, 0.5 * Math.max(dx, dy) * (Math.abs(g.ux) + Math.abs(g.uy)));
     const [k0, k1] = plage(g.zb, g.zh, dz, nz);
     const po = porteCloison(c, ch), passe = po && po.ouverte ? po : null; // porte ouverte : l'air passe

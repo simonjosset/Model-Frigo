@@ -234,10 +234,17 @@ export function cloisonGeo(c, ch) {
   return { L, ux: dx / L, uy: dy / L, ep: c.ep, zb: Math.max(0, zb), zh, pleine: zb <= 0.01 && zh >= H - 0.01 };
 }
 
+/* Cloison horizontale (faux plafond) : rectangle entre deux coins opposés, dessous à zb, sous le plafond */
+export function cloisonHorizGeo(c, ch) {
+  const H = dims(ch).H, ep = Math.min(c.ep, H / 2), zb = Math.min(Math.max(0, c.zb), H - ep);
+  const box = { x0: Math.min(c.x0, c.x1), x1: Math.max(c.x0, c.x1), y0: Math.min(c.y0, c.y1), y1: Math.max(c.y0, c.y1), z0: zb, z1: zb + ep };
+  return { box, L: box.x1 - box.x0, l: box.y1 - box.y0, surface: (box.x1 - box.x0) * (box.y1 - box.y0), zb, ep };
+}
+
 /* Porte dans une cloison : de t0 à t1 le long de la cloison (depuis son début), du sol (ou du bas de la
    cloison) jusqu'à zh. Nulle si la cloison n'a pas de porte ou si elle commence au-dessus de la porte. */
 export function porteCloison(c, ch) {
-  if (!c.porte) return null;
+  if (!c.porte || c.horizontale) return null;
   const g = cloisonGeo(c, ch), w = Math.min(c.porteLargeur, g.L), zh = Math.min(c.porteHauteur, g.zh);
   if (zh <= g.zb + 0.01 || w < 0.05) return null;
   const m = Math.min(Math.max(c.portePos == null ? g.L / 2 : c.portePos, w / 2), g.L - w / 2);

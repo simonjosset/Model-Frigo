@@ -80,6 +80,16 @@ await page.click('[data-ajout="cloisons"]');
 check("cloison ajoutée et sélectionnée", await page.evaluate(() => MF.projet().cloisons.length === 1) && (await page.inputValue('#pane-prop h2 input')) === "Cloison 1");
 await page.fill("#f_ep", "20"); await page.press("#f_ep", "Enter");
 check("épaisseur saisie en cm enregistrée en m", await page.evaluate(() => Math.abs(MF.projet().cloisons[0].ep - 0.2) < 1e-9));
+// Cloison horizontale (faux plafond)
+await page.check('[data-k="horizontale"]');
+const fp = await page.evaluate(() => { const c = MF.projet().cloisons[0]; return { h: c.horizontale, L: Math.abs(c.x1 - c.x0), l: Math.abs(c.y1 - c.y0), zb: c.zb }; });
+check("cloison horizontale : faux plafond de taille non nulle, sous le plafond", fp.h && fp.L >= 0.5 && fp.l >= 0.5 && fp.zb > 2 && fp.zb < 3.6 && await page.isVisible("#f_zb") && /Faux plafond/.test(await page.textContent("#listes")), JSON.stringify(fp));
+const apFp = await attendre(page, () => MF.champs.apercu && MF.champs.apercu.F.G.solide.some(s => s === 3), 10000);
+check("cloison horizontale : pleine dans le maillage de l'aperçu", apFp);
+await page.waitForTimeout(300);
+await page.screenshot({ path: path.join(SHOTS, "1e-faux-plafond.png") });
+await page.uncheck('[data-k="horizontale"]');
+check("cloison redevenue verticale, depuis le sol", await page.evaluate(() => { const c = MF.projet().cloisons[0]; return !c.horizontale && c.zb === 0; }));
 
 // Échelles : produit et chargement
 const idE = await page.evaluate(() => MF.projet().echelles[0].id);

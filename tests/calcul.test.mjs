@@ -151,3 +151,18 @@ test("déflecteur d'angle : accroché au mur, coin plafond / mur plein derrière
   const G2 = construireGrille(p, { h: 0.1 });
   assert.equal(G2.solide[G2.id(Math.floor(9.95 / G2.dx), Math.floor(3 / G2.dy), 0)], 5, "angle sol / mur plein");
 });
+
+test("cloison horizontale (faux plafond) : couche pleine sur le rectangle, air au-dessus et autour", () => {
+  const p = salle({ cloisons: [{ x0: 3, y0: 1, x1: 8, y1: 5, horizontale: true, zb: 2.6, ep: 0.05 }] });
+  assert.equal(p.cloisons[0].horizontale, true);
+  const G = construireGrille(p, { h: 0.1 }), so = (x, y, z) => G.solide[G.id(Math.floor(x / G.dx), Math.floor(y / G.dy), Math.floor(z / G.dz))];
+  assert.equal(so(5, 3, 2.62), SOLIDE.cloison, "panneau");
+  assert.equal(so(5, 3, 3.1), 0, "air au-dessus");
+  assert.equal(so(5, 3, 2.0), 0, "air dessous");
+  assert.equal(so(9, 3, 2.62), 0, "air à côté du panneau");
+  // Pas de fuite verticale à travers le panneau
+  const k = Math.floor(2.62 / G.dz);
+  for (let j = Math.ceil(1.1 / G.dy); j < Math.floor(4.9 / G.dy); j++) for (let i = Math.ceil(3.1 / G.dx); i < Math.floor(7.9 / G.dx); i++) assert.ok(G.solide[G.id(i, j, k)], "trou en " + i + "," + j);
+  // Une cloison verticale reste verticale
+  assert.equal(normaliser({ cloisons: [{ x0: 1, y0: 0, x1: 1, y1: 3 }] }).cloisons[0].horizontale, false);
+});

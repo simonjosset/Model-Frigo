@@ -1,6 +1,6 @@
 /* Panneaux de propriétés : HTML des formulaires (chambre, objets, réglages) et lecture des saisies. */
 import { CATALOGUE } from "../core/produits.js";
-import { dims, surface, volume, evapGeo, echellesGeo, celluleGeo, cloisonGeo, porteCloison, MURS_PIECE, localSurface, polygone, COINS, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "../core/geometrie.js";
+import { dims, surface, volume, evapGeo, echellesGeo, celluleGeo, cloisonGeo, cloisonHorizGeo, porteCloison, MURS_PIECE, localSurface, polygone, COINS, retombeesEvap, basRetombeeAuto, deflecteurGeo } from "../core/geometrie.js";
 import { MAILLES, TYPES_PROJET } from "../core/modele.js";
 import { ctaGeo, TYPES_BOUCHE, FORMES_GAINE, gaineMetres, texteSection } from "../core/composants.js";
 import { couleur } from "../core/champ.js";
@@ -224,8 +224,18 @@ function panneauCellule(p, c, R, opts) {
 }
 
 function panneauCloison(p, c) {
+  const chk = '<label class="chk"><input type="checkbox" data-k="horizontale" data-type="chk"' + (c.horizontale ? " checked" : "") + "> Horizontale (faux plafond)</label>";
+  if (c.horizontale) {
+    const gh = cloisonHorizGeo(c, p.chambre);
+    let h = titre(c, "Cloison horizontale · faux plafond") + '<div class="sec"><h4>Forme</h4>' + chk + "</div>";
+    h += '<div class="sec"><h4>Panneau</h4><div class="grid">' + num(c, "x0", "Coin 1 : x", "m") + num(c, "y0", "Coin 1 : y", "m") + num(c, "x1", "Coin 2 : x", "m") + num(c, "y1", "Coin 2 : y", "m") +
+      num(c, "zb", "Hauteur du dessous", "m du sol") + num(c, "ep", "Épaisseur", "cm", { f: 100, dec: 0 }) + "</div>";
+    h += '<p class="hint">Panneau horizontal entre deux coins opposés : faites glisser le panneau pour le déplacer, ou ses deux poignées (coins) pour changer sa taille. L\'air ne le traverse pas : il passe autour, par les bords laissés libres. Pour une trémie ou plusieurs zones, posez plusieurs panneaux.</p>';
+    h += info([["Dimensions", fr(gh.L, 2) + " × " + fr(gh.l, 2) + " m"], ["Surface", fr(gh.surface, 1) + " m²"], ["Sous le plafond", fr(dims(p.chambre).H - gh.box.z1, 2) + " m d'espace"]]) + "</div>";
+    return h + actions("cloisons", c);
+  }
   const g = cloisonGeo(c, p.chambre);
-  let h = titre(c, "Cloison" + (g.pleine ? " pleine hauteur" : " partielle"));
+  let h = titre(c, "Cloison" + (g.pleine ? " pleine hauteur" : " partielle")) + '<div class="sec"><h4>Forme</h4>' + chk + "</div>";
   h += '<div class="sec"><h4>Tracé</h4><div class="grid">' + num(c, "x0", "Début x", "m") + num(c, "y0", "Début y", "m") + num(c, "x1", "Fin x", "m") + num(c, "y1", "Fin y", "m") +
     num(c, "ep", "Épaisseur", "cm", { f: 100, dec: 0 }) + "<div></div>" + num(c, "zb", "Bas de la cloison", "m") + num(c, "zh", "Haut de la cloison", "m", { vide: "Plafond" }) + "</div>";
   h += '<p class="hint">Faites glisser la cloison pour la déplacer, ou ses deux poignées pour changer son tracé. Une cloison qui ne monte pas jusqu\'au plafond, ou qui part au-dessus du sol, laisse passer l\'air.</p>';
@@ -429,6 +439,7 @@ export function resumeObjet(liste, o, p) {
   if (liste === "evaps") return fr(o.q, 0) + " m³/h · " + fr(o.T, 0) + " m" + (o.type === "double" ? " · double flux" : "") + (o.coude ? " · coudes ↓" : "") + (o.retombee ? " · retombée" : "");
   if (liste === "echelles") { const g = echellesGeo(o); return g.total + " éch. · " + fr(g.total * g.info.nb, 0) + " produits"; }
   if (liste === "cellules") return o.places + " place" + (o.places > 1 ? "s" : "") + " · " + fr(o.q, 0) + " m³/h par ventilateur" + (o.etanche ? " · étanche" : "");
+  if (liste === "cloisons" && o.horizontale) return "Faux plafond " + fr(Math.abs(o.x1 - o.x0), 2) + " × " + fr(Math.abs(o.y1 - o.y0), 2) + " m à " + fr(o.zb, 2) + " m";
   if (liste === "cloisons") { return "L " + fr(Math.hypot(o.x1 - o.x0, o.y1 - o.y0), 2) + " m" + (o.zh != null || o.zb > 0 ? " · partielle" : "") + (o.porte ? " · porte" + (o.porteOuverte ? " ouverte" : " fermée") : ""); }
   if (liste === "obstacles") return fr(o.L, 2) + " × " + fr(o.l, 2) + " × " + fr(o.h, 2) + " m" + (o.poreux > 0.01 ? " · ajouré" : "");
   if (liste === "personnes") return fr(o.taille, 2) + " m";
